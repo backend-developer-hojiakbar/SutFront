@@ -52,11 +52,6 @@ const ProductsPage: React.FC = () => {
     headers: { Authorization: `JWT ${token}` },
   };
 
-  const getImageUrl = (rasm: string | null) => {
-    if (!rasm) return '/placeholder-image.jpg';
-    return rasm.startsWith('http') ? rasm : `${BASE_URL}${rasm}`;
-  };
-
   useEffect(() => {
     const fetchData = async () => {
       if (!token || !user) {
@@ -424,12 +419,12 @@ const ProductsPage: React.FC = () => {
               <div className="flex-shrink-0 mr-4">
                 {product.rasm ? (
                   <img
-                    src={getImageUrl(product.rasm)}
+                    src={`${BASE_URL}${product.rasm}`}
                     alt={product.name}
                     className="w-16 h-16 object-cover rounded"
                     onError={(e) => {
-                      console.log(`Rasm yuklanmadi: ${getImageUrl(product.rasm)}`);
-                      e.currentTarget.src = '/placeholder-image.jpg';
+                      console.log(`Rasm yuklanmadi: ${BASE_URL}${product.rasm}`);
+                      e.currentTarget.src = '/placeholder-image.jpg'; // Agar rasm yuklanmasa, standart rasm
                     }}
                   />
                 ) : (
@@ -575,12 +570,12 @@ const ProductsPage: React.FC = () => {
                   />
                   {(previewImage || editProduct.rasm) && (
                     <img
-                      src={previewImage || getImageUrl(editProduct.rasm)}
+                      src={previewImage || `${BASE_URL}${editProduct.rasm}`}
                       alt={editProduct.name}
                       className="w-16 h-16 object-cover mt-2 rounded"
                       onError={(e) => {
-                        console.log(`Rasm yuklanmadi: ${getImageUrl(editProduct.rasm)}`);
-                        e.currentTarget.src = '/placeholder-image.jpg';
+                        console.log(`Rasm yuklanmadi: ${BASE_URL}${editProduct.rasm}`);
+                        e.currentTarget.src = '/placeholder-image.jpg'; // Standart rasm
                       }}
                     />
                   )}
