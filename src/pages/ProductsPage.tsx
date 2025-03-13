@@ -100,14 +100,8 @@ const ProductsPage: React.FC = () => {
         setCategories(categoriesData);
 
       } catch (err: any) {
-        console.error('Error fetching data:', err.message);
-        if (err.response) {
-          setError(err.response.data?.detail || 'Serverda xatolik yuz berdi');
-        } else if (err.request) {
-          setError('Server bilan aloqa qilishda xatolik: Server ishlamayotgan bo‘lishi mumkin');
-        } else {
-          setError('Xatolik yuz berdi: ' + err.message);
-        }
+        console.error('Error fetching data:', err.response?.data || err.message);
+        setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
       } finally {
         setLoading(false);
       }
