@@ -1,13 +1,12 @@
 import React from 'react';
-import { useCurrencyStore } from '../store/currencyStore';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Package, 
-  Users, 
-  Store, 
-  FileText, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Package,
+  Users,
+  Store,
+  FileText,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -34,30 +33,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('access_token');
     navigate('/login');
   };
 
-  // Foydalanuvchi turiga qarab navigatsiyani filtrlaymiz
   const getFilteredNavigation = () => {
     if (!user?.role) return [];
     const role = user.role.toLowerCase();
-    
+
     if (role === 'admin' || role === 'omborchi') {
-      return baseNavigation; // Hamma bo‘limlar ko‘rinadi
+      return baseNavigation;
     }
-    
+
     if (role === 'dealer') {
-      return baseNavigation.filter(item => 
-        ['Dashboard', 'Warehouse', 'Dealers', 'Shops', 'Sales', 'Reports', 'Settings'].includes(item.name)
-      ); // Products ko‘rinmaydi
+      return baseNavigation.filter(item =>
+        ['Dashboard', 'Warehouse', 'Shops', 'Sales', 'Reports', 'Settings'].includes(item.name)
+      );
     }
-    
+
     if (role === 'shop') {
-      return baseNavigation.filter(item => 
+      return baseNavigation.filter(item =>
         ['Settings', 'Warehouse'].includes(item.name)
-      ); // Faqat Settings va Warehouse
+      );
     }
-    
+
     return [];
   };
 

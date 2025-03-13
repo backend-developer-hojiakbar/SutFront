@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       // API ga so'rov yuborish
       const response = await axios.post(
-        'https://lemoonapi.cdpos.uz:444/login/',
+        'http://127.0.0.1:8000/login/',
         { username, password },
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -33,7 +33,7 @@ export default function LoginPage() {
       localStorage.setItem('refresh_token', refresh);
 
       // Foydalanuvchi ma'lumotlarini olish
-      const userResponse = await axios.get('https://lemoonapi.cdpos.uz:444/users/current_user/', {
+      const userResponse = await axios.get('http://127.0.0.1:8000/users/current_user/', {
         headers: { Authorization: `JWT ${access}` },
       });
 

@@ -38,7 +38,7 @@ interface Product {
   rasm: string | null;
 }
 
-const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
+const BASE_URL = 'http://127.0.0.1:8000/';
 
 export default function ShopsPage() {
   const { token, user } = useAuthStore();

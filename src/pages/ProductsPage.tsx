@@ -23,7 +23,7 @@ interface Category {
   name: string;
 }
 
-const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
+const BASE_URL = 'http://127.0.0.1:8000/';
 
 const ProductsPage: React.FC = () => {
   const { token, user } = useAuthStore();
@@ -45,9 +45,16 @@ const ProductsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const productsPerPage = 9;
 
   const apiConfig = {
     headers: { Authorization: `JWT ${token}` },
+  };
+
+  const getImageUrl = (rasm: string | null) => {
+    if (!rasm) return '/placeholder-image.jpg';
+    return rasm.startsWith('http') ? rasm : `${BASE_URL}${rasm}`;
   };
 
   useEffect(() => {
@@ -58,7 +65,6 @@ const ProductsPage: React.FC = () => {
         return;
       }
 
-      // Faqat admin va omborchi uchun ma'lumot yuklash
       if (user.role !== 'admin' && user.role !== 'omborchi') {
         setError('Bu sahifaga faqat admin va omborchi kirishi mumkin.');
         setLoading(false);
@@ -66,19 +72,30 @@ const ProductsPage: React.FC = () => {
       }
 
       try {
-        const productsRes = await axios.get(`${BASE_URL}mahsulotlar/`, apiConfig);
+        const productsRes = await axios.get(`${BASE_URL}mahsulotlar/?limit=1000`, apiConfig);
         console.log("Products Response:", JSON.stringify(productsRes.data, null, 2));
-        const productsData = Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data;
+        let productsData = Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data;
+
+        if (productsRes.data.next) {
+          let allProducts: Product[] = [...productsData];
+          let nextUrl = productsRes.data.next;
+          while (nextUrl) {
+            const nextRes = await axios.get(nextUrl, apiConfig);
+            const nextData = Array.isArray(nextRes.data.results) ? nextRes.data.results : nextRes.data;
+            allProducts = [...allProducts, ...nextData];
+            nextUrl = nextRes.data.next;
+          }
+          productsData = allProducts;
+        }
+
         productsData.sort((a: Product, b: Product) => a.name.localeCompare(b.name));
         setProducts(productsData);
 
         const unitsRes = await axios.get(`${BASE_URL}birliklar/`, apiConfig);
-        console.log("Units Response:", JSON.stringify(unitsRes.data, null, 2));
         const unitsData = Array.isArray(unitsRes.data.results) ? unitsRes.data.results : unitsRes.data;
         setUnits(unitsData);
 
         const categoriesRes = await axios.get(`${BASE_URL}kategoriyalar/`, apiConfig);
-        console.log("Categories Response:", JSON.stringify(categoriesRes.data, null, 2));
         const categoriesData = Array.isArray(categoriesRes.data.results) ? categoriesRes.data.results : categoriesRes.data;
         setCategories(categoriesData);
 
@@ -120,6 +137,7 @@ const ProductsPage: React.FC = () => {
       setNewProduct({ name: '', sku: '', narx: '', birlik: '', kategoriya: '', rasm: null });
       setPreviewImage(null);
       setError(null);
+      setCurrentPage(1);
     } catch (err: any) {
       console.error('Error adding product:', err.response?.data || err.message);
       const errorDetail = err.response?.data?.name?.[0] || err.response?.data?.narx?.[0] || 'Mahsulot qo‘shishda xatolik yuz berdi';
@@ -204,6 +222,7 @@ const ProductsPage: React.FC = () => {
       await axios.delete(`${BASE_URL}mahsulotlar/${id}/`, apiConfig);
       setProducts(products.filter(p => p.id !== parseInt(id)).sort((a, b) => a.name.localeCompare(b.name)));
       setError(null);
+      setCurrentPage(1);
     } catch (err: any) {
       console.error('Error removing product:', err.response?.data || err.message);
       setError(err.response?.data?.detail || 'Mahsulot o‘chirishda xatolik yuz berdi');
@@ -242,6 +261,13 @@ const ProductsPage: React.FC = () => {
     product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     product.sku.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const indexOfLastProduct = currentPage * productsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+
+  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
   if (loading) return <div className="p-6">Yuklanmoqda...</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
@@ -378,7 +404,7 @@ const ProductsPage: React.FC = () => {
 
       <div>
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Mahsulotlar ro‘yxati</h2>
+          <h2 className="text-xl font-semibold">Mahsulotlar ro‘yxati ({filteredProducts.length} ta)</h2>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-gray-400" />
@@ -393,11 +419,23 @@ const ProductsPage: React.FC = () => {
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProducts.map((product) => (
+          {currentProducts.map((product) => (
             <div key={product.id} className="border p-4 rounded-lg flex items-start">
               <div className="flex-shrink-0 mr-4">
-                {product.rasm && (
-                  <img src={`${BASE_URL}${product.rasm}`} alt={product.name} className="w-16 h-16 object-cover rounded" />
+                {product.rasm ? (
+                  <img
+                    src={getImageUrl(product.rasm)}
+                    alt={product.name}
+                    className="w-16 h-16 object-cover rounded"
+                    onError={(e) => {
+                      console.log(`Rasm yuklanmadi: ${getImageUrl(product.rasm)}`);
+                      e.currentTarget.src = '/placeholder-image.jpg';
+                    }}
+                  />
+                ) : (
+                  <div className="w-16 h-16 bg-gray-200 flex items-center justify-center rounded text-gray-500">
+                    Rasm yo‘q
+                  </div>
                 )}
               </div>
               <div className="flex-1">
@@ -426,6 +464,34 @@ const ProductsPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {filteredProducts.length > productsPerPage && (
+          <div className="mt-6 flex justify-center items-center space-x-2">
+            <button
+              onClick={() => paginate(currentPage - 1)}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded ${currentPage === 1 ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+            >
+              Oldingi
+            </button>
+            {Array.from({ length: totalPages }, (_, index) => (
+              <button
+                key={index + 1}
+                onClick={() => paginate(index + 1)}
+                className={`px-4 py-2 rounded ${currentPage === index + 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
+              >
+                {index + 1}
+              </button>
+            ))}
+            <button
+              onClick={() => paginate(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className={`px-4 py-2 rounded ${currentPage === totalPages ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+            >
+              Keyingi
+            </button>
+          </div>
+        )}
       </div>
 
       {editProduct && (user?.role === 'admin' || user?.role === 'omborchi') && (
@@ -508,7 +574,15 @@ const ProductsPage: React.FC = () => {
                     className="w-full p-2 border rounded"
                   />
                   {(previewImage || editProduct.rasm) && (
-                    <img src={previewImage || `${BASE_URL}${editProduct.rasm}`} alt={editProduct.name} className="w-16 h-16 object-cover mt-2 rounded" />
+                    <img
+                      src={previewImage || getImageUrl(editProduct.rasm)}
+                      alt={editProduct.name}
+                      className="w-16 h-16 object-cover mt-2 rounded"
+                      onError={(e) => {
+                        console.log(`Rasm yuklanmadi: ${getImageUrl(editProduct.rasm)}`);
+                        e.currentTarget.src = '/placeholder-image.jpg';
+                      }}
+                    />
                   )}
                 </div>
               </div>

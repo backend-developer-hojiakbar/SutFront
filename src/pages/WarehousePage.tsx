@@ -65,6 +65,7 @@ interface WarehouseProduct {
 interface Manager {
   id: number;
   username: string;
+  user_type?: string; // user_type qo'shildi
 }
 
 export default function WarehousePage() {
@@ -84,6 +85,7 @@ export default function WarehousePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false); // Yangi modal uchun holat
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [newWarehouse, setNewWarehouse] = useState({
@@ -99,6 +101,13 @@ export default function WarehousePage() {
     birlik: '',
     kategoriya: '',
   });
+  const [newSupplier, setNewSupplier] = useState({
+    username: '',
+    email: '',
+    password: '',
+    phone_number: '',
+    address: '',
+  }); // Yangi yetkazib beruvchi uchun holat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
@@ -116,33 +125,33 @@ export default function WarehousePage() {
           headers: { Authorization: `JWT ${token}` },
         };
 
-        const warehousesRes = await axios.get('https://lemoonapi.cdpos.uz:444/omborlar/', config);
+        const warehousesRes = await axios.get('http://127.0.0.1:8000/omborlar/', config);
         let warehousesData = Array.isArray(warehousesRes.data.results) ? warehousesRes.data.results : warehousesRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           warehousesData = warehousesData.filter(w => w.responsible_person === user.id);
         }
         setWarehouses(warehousesData);
 
-        const productsRes = await axios.get('https://lemoonapi.cdpos.uz:444/mahsulotlar/', config);
+        const productsRes = await axios.get('http://127.0.0.1:8000/mahsulotlar/', config);
         setProducts(Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data);
 
-        const birliklarRes = await axios.get('https://lemoonapi.cdpos.uz:444/birliklar/', config);
+        const birliklarRes = await axios.get('http://127.0.0.1:8000/birliklar/', config);
         setBirliklar(Array.isArray(birliklarRes.data.results) ? birliklarRes.data.results : birliklarRes.data);
 
-        const kategoriyalarRes = await axios.get('https://lemoonapi.cdpos.uz:444/kategoriyalar/', config);
+        const kategoriyalarRes = await axios.get('http://127.0.0.1:8000/kategoriyalar/', config);
         setKategoriyalar(Array.isArray(kategoriyalarRes.data.results) ? kategoriyalarRes.data.results : kategoriyalarRes.data);
 
-        const usersRes = await axios.get('https://lemoonapi.cdpos.uz:444/users/', config);
+        const usersRes = await axios.get('http://127.0.0.1:8000/users/', config);
         setManagers(Array.isArray(usersRes.data.results) ? usersRes.data.results : usersRes.data);
 
-        const purchasesRes = await axios.get('https://lemoonapi.cdpos.uz:444/purchases/', config);
+        const purchasesRes = await axios.get('http://127.0.0.1:8000/purchases/', config);
         let purchasesData = Array.isArray(purchasesRes.data.results) ? purchasesRes.data.results : purchasesRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           purchasesData = purchasesData.filter(p => warehousesData.some(w => w.id === p.ombor));
         }
         setPurchases(purchasesData);
 
-        const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
+        const warehouseProductsRes = await axios.get('http://127.0.0.1:8000/ombor_mahsulot/', config);
         let warehouseProductsData = Array.isArray(warehouseProductsRes.data.results) ? warehouseProductsRes.data.results : warehouseProductsRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           warehouseProductsData = warehouseProductsData.filter(wp => warehousesData.some(w => w.id === wp.ombor));
@@ -235,7 +244,7 @@ export default function WarehousePage() {
         }),
       };
 
-      const response = await axios.post('https://lemoonapi.cdpos.uz:444/purchases/', purchaseData, config);
+      const response = await axios.post('http://127.0.0.1:8000/purchases/', purchaseData, config);
       setPurchases([...purchases, response.data]);
       setSelectedWarehouse('');
       setProductEntries([{ product: '', quantity: '', narx: '', expiryDate: '' }]);
@@ -256,7 +265,7 @@ export default function WarehousePage() {
         responsible_person: managers.find(m => m.username === newWarehouse.responsible_person)?.id || user?.id,
       };
 
-      const response = await axios.post('https://lemoonapi.cdpos.uz:444/omborlar/', warehouseData, config);
+      const response = await axios.post('http://127.0.0.1:8000/omborlar/', warehouseData, config);
       setWarehouses([...warehouses, response.data]);
       setIsModalOpen(false);
       setNewWarehouse({ name: '', address: '', current_stock: '', responsible_person: '' });
@@ -282,7 +291,7 @@ export default function WarehousePage() {
         responsible_person: editingWarehouse.responsible_person || user?.id,
       };
 
-      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
+      const response = await axios.put(`http://127.0.0.1:8000/omborlar/${editingWarehouse.id}/`, updatedData, config);
       setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
       setIsEditModalOpen(false);
       setEditingWarehouse(null);
@@ -295,7 +304,7 @@ export default function WarehousePage() {
     if (window.confirm('Ushbu omborni o‘chirishni xohlaysizmi?')) {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
+        await axios.delete(`http://127.0.0.1:8000/omborlar/${id}/`, config);
         setWarehouses(warehouses.filter(w => w.id !== id));
       } catch (err) {
         setError('Ombor o‘chirishda xatolik');
@@ -341,7 +350,7 @@ export default function WarehousePage() {
         })),
       };
 
-      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/purchases/${editingPurchase.id}/`, purchaseData, config);
+      const response = await axios.put(`http://127.0.0.1:8000/purchases/${editingPurchase.id}/`, purchaseData, config);
       setPurchases(purchases.map(p => (p.id === editingPurchase.id ? response.data : p)));
       setIsEditPurchaseModalOpen(false);
       setSelectedWarehouse('');
@@ -358,7 +367,7 @@ export default function WarehousePage() {
     if (window.confirm('Ushbu buyurtmani o‘chirishni xohlaysizmi?')) {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
+        await axios.delete(`http://127.0.0.1:8000/purchases/${id}/`, config);
         setPurchases(purchases.filter(p => p.id !== id));
       } catch (err) {
         setError('Buyurtmani o‘chirishda xatolik');
@@ -377,13 +386,32 @@ export default function WarehousePage() {
         kategoriya: newProduct.kategoriya ? parseInt(newProduct.kategoriya) : null,
       };
 
-      const response = await axios.post('https://lemoonapi.cdpos.uz:444/mahsulotlar/', newProductData, config);
+      const response = await axios.post('http://127.0.0.1:8000/mahsulotlar/', newProductData, config);
       setProducts([...products, response.data]);
       setProductEntries([{ product: response.data.name, quantity: '', narx: response.data.narx.toString(), expiryDate: '' }]);
       setIsAddProductModalOpen(false);
       setNewProduct({ name: '', sku: '', narx: '', birlik: '', kategoriya: '' });
     } catch (err) {
       setError('Yangi mahsulot qo‘shishda xatolik');
+    }
+  };
+
+  const handleAddSupplier = async () => {
+    try {
+      const config = { headers: { Authorization: `JWT ${token}` } };
+      const supplierData = {
+        ...newSupplier,
+        user_type: 'yetkazib_beruvchi', // Avtomatik yetkazib_beruvchi qilib belgilash
+      };
+
+      const response = await axios.post('http://127.0.0.1:8000/users/', supplierData, config);
+      setManagers([...managers, response.data]); // Yangi yetkazib beruvchini ro‘yxatga qo‘shish
+      setIsAddSupplierModalOpen(false);
+      setNewSupplier({ username: '', email: '', password: '', phone_number: '', address: '' });
+      setNotification('Yetkazib beruvchi muvaffaqiyatli qo‘shildi!');
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err) {
+      setError('Yetkazib beruvchi qo‘shishda xatolik yuz berdi');
     }
   };
 
@@ -436,17 +464,26 @@ export default function WarehousePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Yetkazib beruvchi tanlash</label>
-              <select
-                value={selectedManager}
-                onChange={(e) => setSelectedManager(e.target.value)}
-                className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="">Yetkazib beruvchi tanlang</option>
-    {managers.filter((manager) => manager.user_type === 'yetkazib_beruvchi').map((manager) => (
-      <option key={manager.id} value={manager.username}>{manager.username}</option>
-    ))}
-                
-              </select>
+              <div className="flex items-center space-x-2">
+                <select
+                  value={selectedManager}
+                  onChange={(e) => setSelectedManager(e.target.value)}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                >
+                  <option value="">Yetkazib beruvchi tanlang</option>
+                  {managers
+                    .filter((manager) => manager.user_type === 'yetkazib_beruvchi')
+                    .map((manager) => (
+                      <option key={manager.id} value={manager.username}>{manager.username}</option>
+                    ))}
+                </select>
+                <button
+                  onClick={() => setIsAddSupplierModalOpen(true)}
+                  className="mt-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Sana</label>
@@ -799,16 +836,26 @@ export default function WarehousePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Yetkazib beruvchi tanlash</label>
-                <select
-                  value={selectedManager}
-                  onChange={(e) => setSelectedManager(e.target.value)}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  <option value="">Yetkazib beruvchi tanlang</option>
-                  {managers.map((manager) => (
-                    <option key={manager.id} value={manager.username}>{manager.username}</option>
-                  ))}
-                </select>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={selectedManager}
+                    onChange={(e) => setSelectedManager(e.target.value)}
+                    className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="">Yetkazib beruvchi tanlang</option>
+                    {managers
+                      .filter((manager) => manager.user_type === 'yetkazib_beruvchi')
+                      .map((manager) => (
+                        <option key={manager.id} value={manager.username}>{manager.username}</option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={() => setIsAddSupplierModalOpen(true)}
+                    className="mt-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Sana</label>
@@ -973,6 +1020,75 @@ export default function WarehousePage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Mahsulot qo‘shish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAddSupplierModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-lg font-medium mb-4">Yangi yetkazib beruvchi qo‘shish</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Foydalanuvchi nomi</label>
+                <input
+                  type="text"
+                  value={newSupplier.username}
+                  onChange={(e) => setNewSupplier({ ...newSupplier, username: e.target.value })}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  value={newSupplier.email}
+                  onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Parol</label>
+                <input
+                  type="password"
+                  value={newSupplier.password}
+                  onChange={(e) => setNewSupplier({ ...newSupplier, password: e.target.value })}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Telefon raqami</label>
+                <input
+                  type="text"
+                  value={newSupplier.phone_number}
+                  onChange={(e) => setNewSupplier({ ...newSupplier, phone_number: e.target.value })}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Manzil</label>
+                <input
+                  type="text"
+                  value={newSupplier.address}
+                  onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-4">
+              <button
+                onClick={() => setIsAddSupplierModalOpen(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={handleAddSupplier}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Yetkazib beruvchi qo‘shish
               </button>
             </div>
           </div>

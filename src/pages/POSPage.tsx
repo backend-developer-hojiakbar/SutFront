@@ -5,7 +5,7 @@ import axios from 'axios';
 import html2pdf from 'html2pdf.js';
 import Barcode from 'react-barcode'; // Barcode uchun kutubxona (npm install react-barcode)
 
-const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
+const BASE_URL = 'http://127.0.0.1:8000/';
 
 interface Product {
   id: number;
@@ -306,7 +306,7 @@ const POSPage: React.FC = () => {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Tanlangan Ombor</label>
+            <label className="block text-sm font-medium mb-1">Tanlangan Omborn</label>
             <input
               type="text"
               value={userOmbor?.name || 'Ombor topilmadi'}

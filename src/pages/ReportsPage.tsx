@@ -5,7 +5,7 @@ import axios from 'axios';
 import * as XLSX from 'xlsx';
 import { useNavigate } from 'react-router-dom';
 
-const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
+const BASE_URL = 'http://127.0.0.1:8000/';
 
 interface ReportData {
   id: number;
