@@ -5,7 +5,7 @@ import axios from 'axios';
 import html2pdf from 'html2pdf.js';
 import Barcode from 'react-barcode'; // Barcode uchun kutubxona (npm install react-barcode)
 
-const BASE_URL = 'http://127.0.0.1:8000/';
+const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
 interface Product {
   id: number;

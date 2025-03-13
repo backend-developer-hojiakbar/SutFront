@@ -62,11 +62,11 @@ export default function DashboardPage() {
           headers: { Authorization: `JWT ${token}` },
         };
 
-        const productsRes = await axios.get('http://127.0.0.1:8000/mahsulotlar/', config);
+        const productsRes = await axios.get('https://lemoonapi.cdpos.uz:444/mahsulotlar/', config);
         let totalProducts = productsRes.data.count || 0;
         setProducts(Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data);
 
-        const usersRes = await axios.get('http://127.0.0.1:8000/users/', config);
+        const usersRes = await axios.get('https://lemoonapi.cdpos.uz:444/users/', config);
         let usersData = Array.isArray(usersRes.data.results) ? usersRes.data.results : usersRes.data;
         setUsers(usersData);
         let totalDealers = 0;
@@ -83,7 +83,7 @@ export default function DashboardPage() {
           totalShops = usersData.filter((u: any) => u.user_type === 'shop').length;
         }
 
-        const salesReportRes = await axios.get('http://127.0.0.1:8000/sotuv-hisoboti/', config);
+        const salesReportRes = await axios.get('https://lemoonapi.cdpos.uz:444/sotuv-hisoboti/', config);
         let salesReports = salesReportRes.data;
         let totalSales = 0;
 
@@ -100,7 +100,7 @@ export default function DashboardPage() {
           totalSales = salesReports.reduce((sum: number, report: any) => sum + parseFloat(report.total_sum || 0), 0);
         }
 
-        const recentSalesRes = await axios.get('http://127.0.0.1:8000/sotuvlar/', config);
+        const recentSalesRes = await axios.get('https://lemoonapi.cdpos.uz:444/sotuvlar/', config);
         let salesData = recentSalesRes.data.results || recentSalesRes.data || [];
         if (user.role === 'dealer') {
           const dealerShops = usersData.filter((u: any) => u.user_type === 'shop' && u.created_by === user.id).map((u: any) => u.id);
@@ -110,7 +110,7 @@ export default function DashboardPage() {
         }
         setRecentSales(salesData.sort((a: Sale, b: Sale) => new Date(b.sana).getTime() - new Date(a.sana).getTime()));
 
-        const activitiesRes = await axios.get('http://127.0.0.1:8000/omborlar/', config);
+        const activitiesRes = await axios.get('https://lemoonapi.cdpos.uz:444/omborlar/', config);
         let activitiesData = Array.isArray(activitiesRes.data.results) ? activitiesRes.data.results : activitiesRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           activitiesData = activitiesData.filter((activity: any) => activity.responsible_person === user.id);

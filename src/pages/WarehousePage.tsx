@@ -125,33 +125,33 @@ export default function WarehousePage() {
           headers: { Authorization: `JWT ${token}` },
         };
 
-        const warehousesRes = await axios.get('http://127.0.0.1:8000/omborlar/', config);
+        const warehousesRes = await axios.get('https://lemoonapi.cdpos.uz:444/omborlar/', config);
         let warehousesData = Array.isArray(warehousesRes.data.results) ? warehousesRes.data.results : warehousesRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           warehousesData = warehousesData.filter(w => w.responsible_person === user.id);
         }
         setWarehouses(warehousesData);
 
-        const productsRes = await axios.get('http://127.0.0.1:8000/mahsulotlar/', config);
+        const productsRes = await axios.get('https://lemoonapi.cdpos.uz:444/mahsulotlar/', config);
         setProducts(Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data);
 
-        const birliklarRes = await axios.get('http://127.0.0.1:8000/birliklar/', config);
+        const birliklarRes = await axios.get('https://lemoonapi.cdpos.uz:444/birliklar/', config);
         setBirliklar(Array.isArray(birliklarRes.data.results) ? birliklarRes.data.results : birliklarRes.data);
 
-        const kategoriyalarRes = await axios.get('http://127.0.0.1:8000/kategoriyalar/', config);
+        const kategoriyalarRes = await axios.get('https://lemoonapi.cdpos.uz:444/kategoriyalar/', config);
         setKategoriyalar(Array.isArray(kategoriyalarRes.data.results) ? kategoriyalarRes.data.results : kategoriyalarRes.data);
 
-        const usersRes = await axios.get('http://127.0.0.1:8000/users/', config);
+        const usersRes = await axios.get('https://lemoonapi.cdpos.uz:444/users/', config);
         setManagers(Array.isArray(usersRes.data.results) ? usersRes.data.results : usersRes.data);
 
-        const purchasesRes = await axios.get('http://127.0.0.1:8000/purchases/', config);
+        const purchasesRes = await axios.get('https://lemoonapi.cdpos.uz:444/purchases/', config);
         let purchasesData = Array.isArray(purchasesRes.data.results) ? purchasesRes.data.results : purchasesRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           purchasesData = purchasesData.filter(p => warehousesData.some(w => w.id === p.ombor));
         }
         setPurchases(purchasesData);
 
-        const warehouseProductsRes = await axios.get('http://127.0.0.1:8000/ombor_mahsulot/', config);
+        const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
         let warehouseProductsData = Array.isArray(warehouseProductsRes.data.results) ? warehouseProductsRes.data.results : warehouseProductsRes.data;
         if (user.role === 'dealer' || user.role === 'shop') {
           warehouseProductsData = warehouseProductsData.filter(wp => warehousesData.some(w => w.id === wp.ombor));
@@ -244,7 +244,7 @@ export default function WarehousePage() {
         }),
       };
 
-      const response = await axios.post('http://127.0.0.1:8000/purchases/', purchaseData, config);
+      const response = await axios.post('https://lemoonapi.cdpos.uz:444/purchases/', purchaseData, config);
       setPurchases([...purchases, response.data]);
       setSelectedWarehouse('');
       setProductEntries([{ product: '', quantity: '', narx: '', expiryDate: '' }]);
@@ -265,7 +265,7 @@ export default function WarehousePage() {
         responsible_person: managers.find(m => m.username === newWarehouse.responsible_person)?.id || user?.id,
       };
 
-      const response = await axios.post('http://127.0.0.1:8000/omborlar/', warehouseData, config);
+      const response = await axios.post('https://lemoonapi.cdpos.uz:444/omborlar/', warehouseData, config);
       setWarehouses([...warehouses, response.data]);
       setIsModalOpen(false);
       setNewWarehouse({ name: '', address: '', current_stock: '', responsible_person: '' });
@@ -291,7 +291,7 @@ export default function WarehousePage() {
         responsible_person: editingWarehouse.responsible_person || user?.id,
       };
 
-      const response = await axios.put(`http://127.0.0.1:8000/omborlar/${editingWarehouse.id}/`, updatedData, config);
+      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
       setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
       setIsEditModalOpen(false);
       setEditingWarehouse(null);
@@ -304,7 +304,7 @@ export default function WarehousePage() {
     if (window.confirm('Ushbu omborni o‘chirishni xohlaysizmi?')) {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`http://127.0.0.1:8000/omborlar/${id}/`, config);
+        await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
         setWarehouses(warehouses.filter(w => w.id !== id));
       } catch (err) {
         setError('Ombor o‘chirishda xatolik');
@@ -350,7 +350,7 @@ export default function WarehousePage() {
         })),
       };
 
-      const response = await axios.put(`http://127.0.0.1:8000/purchases/${editingPurchase.id}/`, purchaseData, config);
+      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/purchases/${editingPurchase.id}/`, purchaseData, config);
       setPurchases(purchases.map(p => (p.id === editingPurchase.id ? response.data : p)));
       setIsEditPurchaseModalOpen(false);
       setSelectedWarehouse('');
@@ -367,7 +367,7 @@ export default function WarehousePage() {
     if (window.confirm('Ushbu buyurtmani o‘chirishni xohlaysizmi?')) {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`http://127.0.0.1:8000/purchases/${id}/`, config);
+        await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
         setPurchases(purchases.filter(p => p.id !== id));
       } catch (err) {
         setError('Buyurtmani o‘chirishda xatolik');
@@ -386,7 +386,7 @@ export default function WarehousePage() {
         kategoriya: newProduct.kategoriya ? parseInt(newProduct.kategoriya) : null,
       };
 
-      const response = await axios.post('http://127.0.0.1:8000/mahsulotlar/', newProductData, config);
+      const response = await axios.post('https://lemoonapi.cdpos.uz:444/mahsulotlar/', newProductData, config);
       setProducts([...products, response.data]);
       setProductEntries([{ product: response.data.name, quantity: '', narx: response.data.narx.toString(), expiryDate: '' }]);
       setIsAddProductModalOpen(false);
@@ -404,7 +404,7 @@ export default function WarehousePage() {
         user_type: 'yetkazib_beruvchi', // Avtomatik yetkazib_beruvchi qilib belgilash
       };
 
-      const response = await axios.post('http://127.0.0.1:8000/users/', supplierData, config);
+      const response = await axios.post('https://lemoonapi.cdpos.uz:444/users/', supplierData, config);
       setManagers([...managers, response.data]); // Yangi yetkazib beruvchini ro‘yxatga qo‘shish
       setIsAddSupplierModalOpen(false);
       setNewSupplier({ username: '', email: '', password: '', phone_number: '', address: '' });

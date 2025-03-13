@@ -3,7 +3,7 @@ import { User, Database, Shield, Trash2, Edit } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 
-const BASE_URL = 'http://127.0.0.1:8000/';
+const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
 const SettingsPage: React.FC = () => {
   const { token, user } = useAuthStore();
