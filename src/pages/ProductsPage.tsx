@@ -23,7 +23,7 @@ interface Category {
   name: string;
 }
 
-const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
+const BASE_URL = 'https://lemoonapi.cdpos.uz:444/'; // Yangi API URL
 
 const ProductsPage: React.FC = () => {
   const { token, user } = useAuthStore();
@@ -52,6 +52,11 @@ const ProductsPage: React.FC = () => {
     headers: { Authorization: `JWT ${token}` },
   };
 
+  const getImageUrl = (rasm: string | null) => {
+    if (!rasm) return '/placeholder-image.jpg';
+    return rasm.startsWith('http') ? rasm : `${BASE_URL}${rasm}`;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       if (!token || !user) {
@@ -67,18 +72,33 @@ const ProductsPage: React.FC = () => {
       }
 
       try {
+        console.log('So‘rov yuborilmoqda:', `${BASE_URL}mahsulotlar/?limit=1000`);
         const productsRes = await axios.get(`${BASE_URL}mahsulotlar/?limit=1000`, apiConfig);
-        console.log("Products Response:", JSON.stringify(productsRes.data, null, 2));
+        console.log('Products Response:', JSON.stringify(productsRes.data, null, 2));
         let productsData = Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data;
 
         if (productsRes.data.next) {
           let allProducts: Product[] = [...productsData];
           let nextUrl = productsRes.data.next;
+          console.log('Backend’dan kelgan next URL:', nextUrl);
+
+          // Backend’dan kelgan next URL’ni BASE_URL bilan almashtiramiz
+          const urlObj = new URL(nextUrl);
+          const correctedNextUrl = `${BASE_URL}mahsulotlar/${urlObj.search}`;
+          console.log('To‘g‘rilangan next URL:', correctedNextUrl);
+
           while (nextUrl) {
-            const nextRes = await axios.get(nextUrl, apiConfig);
+            console.log('Keyingi sahifaga so‘rov:', correctedNextUrl);
+            const nextRes = await axios.get(correctedNextUrl, apiConfig);
             const nextData = Array.isArray(nextRes.data.results) ? nextRes.data.results : nextRes.data;
             allProducts = [...allProducts, ...nextData];
             nextUrl = nextRes.data.next;
+
+            // Har bir keyingi sahifa uchun URL’ni to‘g‘rilash
+            if (nextUrl) {
+              const nextUrlObj = new URL(nextUrl);
+              correctedNextUrl = `${BASE_URL}mahsulotlar/${nextUrlObj.search}`;
+            }
           }
           productsData = allProducts;
         }
@@ -86,17 +106,27 @@ const ProductsPage: React.FC = () => {
         productsData.sort((a: Product, b: Product) => a.name.localeCompare(b.name));
         setProducts(productsData);
 
+        console.log('Birliklar uchun so‘rov:', `${BASE_URL}birliklar/`);
         const unitsRes = await axios.get(`${BASE_URL}birliklar/`, apiConfig);
         const unitsData = Array.isArray(unitsRes.data.results) ? unitsRes.data.results : unitsRes.data;
         setUnits(unitsData);
 
+        console.log('Kategoriyalar uchun so‘rov:', `${BASE_URL}kategoriyalar/`);
         const categoriesRes = await axios.get(`${BASE_URL}kategoriyalar/`, apiConfig);
         const categoriesData = Array.isArray(categoriesRes.data.results) ? categoriesRes.data.results : categoriesRes.data;
         setCategories(categoriesData);
 
       } catch (err: any) {
-        console.error('Error fetching data:', err.response?.data || err.message);
-        setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
+        console.error('Error fetching data:', err.message);
+        if (err.response) {
+          setError(err.response.data?.detail || 'Serverda xatolik yuz berdi');
+          console.log('Server javobi:', err.response.data);
+        } else if (err.request) {
+          setError('Server bilan aloqa qilishda xatolik: Server ishlamayotgan bo‘lishi mumkin');
+          console.log('So‘rov muvaffaqiyatsiz:', err.request);
+        } else {
+          setError('Xatolik yuz berdi: ' + err.message);
+        }
       } finally {
         setLoading(false);
       }
@@ -120,8 +150,7 @@ const ProductsPage: React.FC = () => {
       formData.append('kategoriya', newProduct.kategoriya);
       if (newProduct.rasm) formData.append('rasm', newProduct.rasm);
 
-      console.log("Sending formData for new product:", [...formData]);
-
+      console.log('Yuborilayotgan formData:', [...formData]);
       const response = await axios.post(`${BASE_URL}mahsulotlar/`, formData, {
         headers: {
           ...apiConfig.headers,
@@ -193,8 +222,7 @@ const ProductsPage: React.FC = () => {
       if (selectedKategoriyaId) formData.append('kategoriya', selectedKategoriyaId.toString());
       if (newProduct.rasm) formData.append('rasm', newProduct.rasm);
 
-      console.log("Sending formData for update product:", [...formData]);
-
+      console.log('Yangilash uchun formData:', [...formData]);
       const response = await axios.put(`${BASE_URL}mahsulotlar/${editProduct.id}/`, formData, {
         headers: {
           ...apiConfig.headers,
@@ -419,12 +447,12 @@ const ProductsPage: React.FC = () => {
               <div className="flex-shrink-0 mr-4">
                 {product.rasm ? (
                   <img
-                    src={`${BASE_URL}${product.rasm}`}
+                    src={getImageUrl(product.rasm)}
                     alt={product.name}
                     className="w-16 h-16 object-cover rounded"
                     onError={(e) => {
-                      console.log(`Rasm yuklanmadi: ${BASE_URL}${product.rasm}`);
-                      e.currentTarget.src = '/placeholder-image.jpg'; // Agar rasm yuklanmasa, standart rasm
+                      console.log(`Rasm yuklanmadi: ${getImageUrl(product.rasm)}`);
+                      e.currentTarget.src = '/placeholder-image.jpg';
                     }}
                   />
                 ) : (
@@ -570,12 +598,12 @@ const ProductsPage: React.FC = () => {
                   />
                   {(previewImage || editProduct.rasm) && (
                     <img
-                      src={previewImage || `${BASE_URL}${editProduct.rasm}`}
+                      src={previewImage || getImageUrl(editProduct.rasm)}
                       alt={editProduct.name}
                       className="w-16 h-16 object-cover mt-2 rounded"
                       onError={(e) => {
-                        console.log(`Rasm yuklanmadi: ${BASE_URL}${editProduct.rasm}`);
-                        e.currentTarget.src = '/placeholder-image.jpg'; // Standart rasm
+                        console.log(`Rasm yuklanmadi: ${getImageUrl(editProduct.rasm)}`);
+                        e.currentTarget.src = '/placeholder-image.jpg';
                       }}
                     />
                   )}
