@@ -17,7 +17,7 @@ interface Product {
 interface CartItem {
   productId: number;
   quantity: number;
-  price: number;
+  price: number; // Bu narx mahsulotning o‘zgartirilgan yoki asl narxi bo‘ladi
 }
 
 interface Ombor {
@@ -57,6 +57,8 @@ const POSPage: React.FC = () => {
   const [totalSum, setTotalSum] = useState(0);
   const [saleReceipt, setSaleReceipt] = useState<Sale | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false); // Narx o‘zgartirish modali uchun
+  const [customPrice, setCustomPrice] = useState<number>(0); // O‘zgartirilgan narx uchun
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const apiConfig = {
@@ -117,7 +119,25 @@ const POSPage: React.FC = () => {
     fetchData();
   }, [token, user]);
 
-  const addToCart = () => {
+  const openPriceModal = () => {
+    const product = products.find(p => p.id === selectedProduct);
+    if (product) {
+      setCustomPrice(typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
+      setIsPriceModalOpen(true);
+    }
+  };
+
+  const saveCustomPrice = () => {
+    if (customPrice <= 0) {
+      setError('Narx 0 dan katta bo‘lishi kerak');
+      return;
+    }
+    setIsPriceModalOpen(false);
+    setError(null);
+    addToCartWithCustomPrice();
+  };
+
+  const addToCartWithCustomPrice = () => {
     if (!selectedProduct || quantity <= 0) {
       setError('Mahsulot tanlang va to‘g‘ri miqdorni kiriting');
       return;
@@ -134,25 +154,28 @@ const POSPage: React.FC = () => {
       return;
     }
 
+    const priceToUse = customPrice || (typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
+
     const existingItem = cart.find(item => item.productId === selectedProduct);
     if (existingItem) {
       setCart(cart.map(item =>
         item.productId === selectedProduct
-          ? { ...item, quantity: item.quantity + quantity }
+          ? { ...item, quantity: item.quantity + quantity, price: priceToUse }
           : item
       ));
     } else {
-      setCart([...cart, {
-        productId: selectedProduct,
-        quantity: quantity,
-        price: typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx
-      }]);
+      setCart([...cart, { productId: selectedProduct, quantity, price: priceToUse }]);
     }
-    setTotalSum(cart.reduce((sum, item) => sum + (item.quantity * item.price), 0) + (quantity * (typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx)));
+    setTotalSum(cart.reduce((sum, item) => sum + (item.quantity * item.price), 0) + (quantity * priceToUse));
     setSelectedProduct(null);
     setQuantity(1);
     setSearchQuery('');
+    setCustomPrice(0);
     setError(null);
+  };
+
+  const addToCart = () => {
+    addToCartWithCustomPrice();
   };
 
   const removeFromCart = (productId: number) => {
@@ -306,7 +329,7 @@ const POSPage: React.FC = () => {
           </div>
 
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Tanlangan Omborn</label>
+            <label className="block text-sm font-medium mb-1">Tanlangan Ombor</label>
             <input
               type="text"
               value={userOmbor?.name || 'Ombor topilmadi'}
@@ -373,14 +396,23 @@ const POSPage: React.FC = () => {
                 onChange={(e) => setQuantity(Number(e.target.value))}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Narx</label>
-              <input
-                type="number"
-                className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
-                value={selectedProduct ? (typeof products.find(p => p.id === selectedProduct)?.narx === 'string' ? parseFloat(products.find(p => p.id === selectedProduct)?.narx || '0') : products.find(p => p.id === selectedProduct)?.narx || 0) : 0}
-                disabled
-              />
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700">Narx</label>
+                <input
+                  type="number"
+                  className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
+                  value={customPrice > 0 ? customPrice : (selectedProduct ? (typeof products.find(p => p.id === selectedProduct)?.narx === 'string' ? parseFloat(products.find(p => p.id === selectedProduct)?.narx || '0') : products.find(p => p.id === selectedProduct)?.narx || 0) : 0)}
+                  disabled
+                />
+              </div>
+              <button
+                className="mt-6 bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600"
+                onClick={openPriceModal}
+                disabled={!selectedProduct}
+              >
+                Narxni O‘zgartirish
+              </button>
             </div>
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -409,7 +441,7 @@ const POSPage: React.FC = () => {
                           {products.find(p => p.id === item.productId)?.name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {item.quantity} x {parseFloat(item.price.toString()).toLocaleString()} UZS
+                          {item.quantity} x {item.price.toLocaleString()} UZS
                         </div>
                       </div>
                       <button
@@ -441,6 +473,46 @@ const POSPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Narx o‘zgartirish modali */}
+      {isPriceModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h2 className="text-lg font-medium mb-4">Narxni O‘zgartirish</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Yangi Narx (UZS)</label>
+                <input
+                  type="number"
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  value={customPrice}
+                  min={0}
+                  onChange={(e) => setCustomPrice(Number(e.target.value))}
+                />
+              </div>
+              {error && <div className="text-red-500 text-sm">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <button
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  onClick={() => {
+                    setIsPriceModalOpen(false);
+                    setCustomPrice(0);
+                    setError(null);
+                  }}
+                >
+                  Bekor Qilish
+                </button>
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  onClick={saveCustomPrice}
+                >
+                  Saqlash
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chek modal */}
       {isReceiptModalOpen && saleReceipt && (
