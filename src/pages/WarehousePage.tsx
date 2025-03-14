@@ -35,6 +35,7 @@ interface Purchase {
   ombor: number;
   sana: string;
   yetkazib_beruvchi: number;
+  total_sum: number;
   items: PurchaseItem[];
 }
 
@@ -65,7 +66,7 @@ interface WarehouseProduct {
 interface Manager {
   id: number;
   username: string;
-  user_type?: string; // user_type qo'shildi
+  user_type?: string;
 }
 
 export default function WarehousePage() {
@@ -85,32 +86,35 @@ export default function WarehousePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
-  const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false); // Yangi modal uchun holat
+  const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
-  const [newWarehouse, setNewWarehouse] = useState({
-    name: '',
-    address: '',
-    current_stock: '',
-    responsible_person: '',
-  });
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    sku: '',
-    narx: '',
-    birlik: '',
-    kategoriya: '',
-  });
-  const [newSupplier, setNewSupplier] = useState({
-    username: '',
-    email: '',
-    password: '',
-    phone_number: '',
-    address: '',
-  }); // Yangi yetkazib beruvchi uchun holat
+  const [newWarehouse, setNewWarehouse] = useState({ name: '', address: '', current_stock: '', responsible_person: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', sku: '', narx: '', birlik: '', kategoriya: '' });
+  const [newSupplier, setNewSupplier] = useState({ username: '', email: '', password: '', phone_number: '', address: '' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [productSearchQueries, setProductSearchQueries] = useState<string[]>([]);
+
+  const fetchAllProducts = async (url: string, config: any, accumulated: Product[] = []): Promise<Product[]> => {
+    try {
+      const baseUrl = 'https://lemoonapi.cdpos.uz:444';
+      const fetchUrl = url.includes(baseUrl) ? url : `${baseUrl}/mahsulotlar/`;
+      const res = await axios.get(fetchUrl, config);
+      const data = res.data.results || res.data;
+      const allProducts = [...accumulated, ...data];
+
+      if (res.data.next) {
+        const correctedNextUrl = res.data.next.replace(/http:\/\/[^\/]+/, baseUrl);
+        return fetchAllProducts(correctedNextUrl, config, allProducts);
+      }
+      return allProducts;
+    } catch (err) {
+      console.error('Mahsulotlarni yuklashda xatolik:', err);
+      throw err;
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -121,45 +125,46 @@ export default function WarehousePage() {
       }
 
       try {
-        const config = {
-          headers: { Authorization: `JWT ${token}` },
-        };
+        const config = { headers: { Authorization: `JWT ${token}` } };
+        const baseUrl = 'https://lemoonapi.cdpos.uz:444';
 
-        const warehousesRes = await axios.get('https://lemoonapi.cdpos.uz:444/omborlar/', config);
-        let warehousesData = Array.isArray(warehousesRes.data.results) ? warehousesRes.data.results : warehousesRes.data;
+        const warehousesRes = await axios.get(`${baseUrl}/omborlar/`, config);
+        let warehousesData = Array.isArray(warehousesRes.data) ? warehousesRes.data : warehousesRes.data.results || [];
         if (user.role === 'dealer' || user.role === 'shop') {
-          warehousesData = warehousesData.filter(w => w.responsible_person === user.id);
+          warehousesData = warehousesData.filter((w: Warehouse) => w.responsible_person === user.id);
         }
         setWarehouses(warehousesData);
 
-        const productsRes = await axios.get('https://lemoonapi.cdpos.uz:444/mahsulotlar/', config);
-        setProducts(Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data);
+        const allProducts = await fetchAllProducts(`${baseUrl}/mahsulotlar/`, config);
+        setProducts(allProducts);
 
-        const birliklarRes = await axios.get('https://lemoonapi.cdpos.uz:444/birliklar/', config);
-        setBirliklar(Array.isArray(birliklarRes.data.results) ? birliklarRes.data.results : birliklarRes.data);
+        const birliklarRes = await axios.get(`${baseUrl}/birliklar/`, config);
+        setBirliklar(Array.isArray(birliklarRes.data) ? birliklarRes.data : birliklarRes.data.results || []);
 
-        const kategoriyalarRes = await axios.get('https://lemoonapi.cdpos.uz:444/kategoriyalar/', config);
-        setKategoriyalar(Array.isArray(kategoriyalarRes.data.results) ? kategoriyalarRes.data.results : kategoriyalarRes.data);
+        const kategoriyalarRes = await axios.get(`${baseUrl}/kategoriyalar/`, config);
+        setKategoriyalar(Array.isArray(kategoriyalarRes.data) ? kategoriyalarRes.data : kategoriyalarRes.data.results || []);
 
-        const usersRes = await axios.get('https://lemoonapi.cdpos.uz:444/users/', config);
-        setManagers(Array.isArray(usersRes.data.results) ? usersRes.data.results : usersRes.data);
+        const usersRes = await axios.get(`${baseUrl}/users/`, config);
+        setManagers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.results || []);
 
-        const purchasesRes = await axios.get('https://lemoonapi.cdpos.uz:444/purchases/', config);
-        let purchasesData = Array.isArray(purchasesRes.data.results) ? purchasesRes.data.results : purchasesRes.data;
+        const purchasesRes = await axios.get(`${baseUrl}/purchases/`, config);
+        let purchasesData = Array.isArray(purchasesRes.data) ? purchasesRes.data : purchasesRes.data.results || [];
         if (user.role === 'dealer' || user.role === 'shop') {
-          purchasesData = purchasesData.filter(p => warehousesData.some(w => w.id === p.ombor));
+          purchasesData = purchasesData.filter((p: Purchase) => warehousesData.some((w: Warehouse) => w.id === p.ombor));
         }
         setPurchases(purchasesData);
 
-        const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
-        let warehouseProductsData = Array.isArray(warehouseProductsRes.data.results) ? warehouseProductsRes.data.results : warehouseProductsRes.data;
+        const warehouseProductsRes = await axios.get(`${baseUrl}/ombor_mahsulot/`, config);
+        let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
         if (user.role === 'dealer' || user.role === 'shop') {
-          warehouseProductsData = warehouseProductsData.filter(wp => warehousesData.some(w => w.id === wp.ombor));
+          warehouseProductsData = warehouseProductsData.filter((wp: WarehouseProduct) => warehousesData.some((w: Warehouse) => w.id === wp.ombor));
         }
         setWarehouseProducts(warehouseProductsData);
 
+        setProductSearchQueries(productEntries.map(() => ''));
       } catch (err) {
         setError('Ma\'lumotlarni yuklashda xatolik yuz berdi');
+        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -181,25 +186,32 @@ export default function WarehousePage() {
 
   const handleAddProductEntry = () => {
     setProductEntries([...productEntries, { product: '', quantity: '', narx: '', expiryDate: '' }]);
+    setProductSearchQueries([...productSearchQueries, '']);
   };
 
   const handleRemoveProductEntry = (index: number) => {
     if (productEntries.length > 1) {
-      const newProductEntries = productEntries.filter((_, i) => i !== index);
-      setProductEntries(newProductEntries);
+      setProductEntries(productEntries.filter((_, i) => i !== index));
+      setProductSearchQueries(productSearchQueries.filter((_, i) => i !== index));
     }
   };
 
   const handleProductEntryChange = (index: number, field: keyof ProductEntry, value: string) => {
     const newProductEntries = [...productEntries];
     if (field === 'product') {
-      const selectedProduct = products.find(p => p.name === value);
+      const selectedProduct = products.find(p => p.name.toLowerCase() === value.toLowerCase());
       newProductEntries[index].product = value;
       newProductEntries[index].narx = selectedProduct ? selectedProduct.narx.toString() : '';
     } else {
       newProductEntries[index][field] = value;
     }
     setProductEntries(newProductEntries);
+  };
+
+  const handleProductSearchChange = (index: number, value: string) => {
+    const newSearchQueries = [...productSearchQueries];
+    newSearchQueries[index] = value;
+    setProductSearchQueries(newSearchQueries);
   };
 
   const isFormValid = () => {
@@ -246,12 +258,24 @@ export default function WarehousePage() {
 
       const response = await axios.post('https://lemoonapi.cdpos.uz:444/purchases/', purchaseData, config);
       setPurchases([...purchases, response.data]);
+
+      const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
+      let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
+      if (user.role === 'dealer' || user.role === 'shop') {
+        warehouseProductsData = warehouseProductsData.filter((wp: WarehouseProduct) => warehouses.some((w: Warehouse) => w.id === wp.ombor));
+      }
+      setWarehouseProducts(warehouseProductsData);
+
       setSelectedWarehouse('');
       setProductEntries([{ product: '', quantity: '', narx: '', expiryDate: '' }]);
+      setProductSearchQueries(['']);
       setSelectedManager('');
       setDate('');
+      setNotification('Buyurtma muvaffaqiyatli qo‘shildi!');
+      setTimeout(() => setNotification(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Mahsulotlarni qo‘shishda xatolik');
+      console.error(err);
     }
   };
 
@@ -269,8 +293,11 @@ export default function WarehousePage() {
       setWarehouses([...warehouses, response.data]);
       setIsModalOpen(false);
       setNewWarehouse({ name: '', address: '', current_stock: '', responsible_person: '' });
+      setNotification('Ombor muvaffaqiyatli qo‘shildi!');
+      setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Ombor qo‘shishda xatolik');
+      console.error(err);
     }
   };
 
@@ -295,8 +322,11 @@ export default function WarehousePage() {
       setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
       setIsEditModalOpen(false);
       setEditingWarehouse(null);
+      setNotification('Ombor muvaffaqiyatli yangilandi!');
+      setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Ombor yangilashda xatolik');
+      console.error(err);
     }
   };
 
@@ -306,8 +336,11 @@ export default function WarehousePage() {
         const config = { headers: { Authorization: `JWT ${token}` } };
         await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
         setWarehouses(warehouses.filter(w => w.id !== id));
+        setNotification('Ombor muvaffaqiyatli o‘chirildi!');
+        setTimeout(() => setNotification(null), 3000);
       } catch (err) {
         setError('Ombor o‘chirishda xatolik');
+        console.error(err);
       }
     }
   };
@@ -323,6 +356,7 @@ export default function WarehousePage() {
       narx: item.narx.toString(),
       expiryDate: item.yaroqlilik_muddati || '',
     })));
+    setProductSearchQueries(purchase.items.map(() => ''));
     setIsEditPurchaseModalOpen(true);
   };
 
@@ -338,28 +372,49 @@ export default function WarehousePage() {
       const warehouseId = warehouses.find(w => w.name === selectedWarehouse)?.id;
       const managerId = managers.find(m => m.username === selectedManager)?.id;
 
+      if (!warehouseId || !managerId) {
+        setError('Ombor yoki yetkazib beruvchi topilmadi');
+        return;
+      }
+
       const purchaseData = {
         ombor: warehouseId,
         sana: date,
         yetkazib_beruvchi: managerId,
-        items: productEntries.map(entry => ({
-          mahsulot: products.find(p => p.name === entry.product)?.id,
-          soni: parseInt(entry.quantity),
-          narx: parseFloat(entry.narx).toFixed(2),
-          yaroqlilik_muddati: entry.expiryDate || null,
-        })),
+        items: productEntries.map(entry => {
+          const product = products.find(p => p.name === entry.product);
+          if (!product) throw new Error(`Mahsulot "${entry.product}" topilmadi`);
+          return {
+            mahsulot: product.id,
+            soni: parseInt(entry.quantity) || 0,
+            narx: parseFloat(entry.narx).toFixed(2),
+            yaroqlilik_muddati: entry.expiryDate || null,
+          };
+        }),
       };
 
       const response = await axios.put(`https://lemoonapi.cdpos.uz:444/purchases/${editingPurchase.id}/`, purchaseData, config);
       setPurchases(purchases.map(p => (p.id === editingPurchase.id ? response.data : p)));
+
+      const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
+      let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
+      if (user.role === 'dealer' || user.role === 'shop') {
+        warehouseProductsData = warehouseProductsData.filter((wp: WarehouseProduct) => warehouses.some((w: Warehouse) => w.id === wp.ombor));
+      }
+      setWarehouseProducts(warehouseProductsData);
+
       setIsEditPurchaseModalOpen(false);
       setSelectedWarehouse('');
       setProductEntries([{ product: '', quantity: '', narx: '', expiryDate: '' }]);
+      setProductSearchQueries(['']);
       setSelectedManager('');
       setDate('');
       setEditingPurchase(null);
-    } catch (err) {
-      setError('Buyurtmani yangilashda xatolik');
+      setNotification('Buyurtma muvaffaqiyatli yangilandi!');
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Buyurtmani yangilashda xatolik');
+      console.error('Update Purchase Error:', err.response?.data || err.message);
     }
   };
 
@@ -369,8 +424,19 @@ export default function WarehousePage() {
         const config = { headers: { Authorization: `JWT ${token}` } };
         await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
         setPurchases(purchases.filter(p => p.id !== id));
-      } catch (err) {
-        setError('Buyurtmani o‘chirishda xatolik');
+
+        const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
+        let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
+        if (user.role === 'dealer' || user.role === 'shop') {
+          warehouseProductsData = warehouseProductsData.filter((wp: WarehouseProduct) => warehouses.some((w: Warehouse) => w.id === wp.ombor));
+        }
+        setWarehouseProducts(warehouseProductsData);
+
+        setNotification('Buyurtma muvaffaqiyatli o‘chirildi!');
+        setTimeout(() => setNotification(null), 3000);
+      } catch (err: any) {
+        setError(err.response?.data?.detail || 'Buyurtmani o‘chirishda xatolik');
+        console.error('Delete Purchase Error:', err.response?.data || err.message);
       }
     }
   };
@@ -389,10 +455,14 @@ export default function WarehousePage() {
       const response = await axios.post('https://lemoonapi.cdpos.uz:444/mahsulotlar/', newProductData, config);
       setProducts([...products, response.data]);
       setProductEntries([{ product: response.data.name, quantity: '', narx: response.data.narx.toString(), expiryDate: '' }]);
+      setProductSearchQueries(['']);
       setIsAddProductModalOpen(false);
       setNewProduct({ name: '', sku: '', narx: '', birlik: '', kategoriya: '' });
+      setNotification('Yangi mahsulot muvaffaqiyatli qo‘shildi!');
+      setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Yangi mahsulot qo‘shishda xatolik');
+      console.error(err);
     }
   };
 
@@ -401,19 +471,54 @@ export default function WarehousePage() {
       const config = { headers: { Authorization: `JWT ${token}` } };
       const supplierData = {
         ...newSupplier,
-        user_type: 'yetkazib_beruvchi', // Avtomatik yetkazib_beruvchi qilib belgilash
+        user_type: 'yetkazib_beruvchi',
       };
 
       const response = await axios.post('https://lemoonapi.cdpos.uz:444/users/', supplierData, config);
-      setManagers([...managers, response.data]); // Yangi yetkazib beruvchini ro‘yxatga qo‘shish
+      setManagers([...managers, response.data]);
       setIsAddSupplierModalOpen(false);
       setNewSupplier({ username: '', email: '', password: '', phone_number: '', address: '' });
       setNotification('Yetkazib beruvchi muvaffaqiyatli qo‘shildi!');
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Yetkazib beruvchi qo‘shishda xatolik yuz berdi');
+      console.error(err);
     }
   };
+
+  const renderProductSearch = (index: number) => (
+    <div className="relative">
+      <label className="block text-sm font-medium text-gray-700">Mahsulot tanlash</label>
+      <input
+        type="text"
+        value={productSearchQueries[index] || ''}
+        onChange={(e) => handleProductSearchChange(index, e.target.value)}
+        placeholder="Mahsulot nomini kiriting"
+        className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+      />
+      {productSearchQueries[index] && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+          {products
+            .filter(p => p.name.toLowerCase().includes(productSearchQueries[index].toLowerCase()))
+            .map((product) => (
+              <div
+                key={product.id}
+                className="p-2 hover:bg-gray-100 cursor-pointer"
+                onClick={() => {
+                  handleProductEntryChange(index, 'product', product.name);
+                  handleProductSearchChange(index, '');
+                }}
+              >
+                {product.name} (Narx: {product.narx} UZS)
+              </div>
+            ))}
+        </div>
+      )}
+      {productEntries[index].product && (
+        <div className="mt-1 text-sm text-gray-600">Tanlangan: {productEntries[index].product}</div>
+      )}
+    </div>
+  );
 
   if (loading) return <div className="p-6">Yuklanmoqda...</div>;
   if (error) return <div className="p-6 text-red-600">{error}</div>;
@@ -421,7 +526,7 @@ export default function WarehousePage() {
   return (
     <div className="p-6">
       {notification && (
-        <div className="fixed top-4 right-4 bg-red-500 text-white p-4 rounded-md shadow-lg">
+        <div className="fixed top-4 right-4 bg-green-500 text-white p-4 rounded-md shadow-lg">
           {notification}
         </div>
       )}
@@ -509,19 +614,7 @@ export default function WarehousePage() {
             </div>
             {productEntries.map((entry, index) => (
               <div key={index} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Mahsulot tanlash</label>
-                  <select
-                    value={entry.product}
-                    onChange={(e) => handleProductEntryChange(index, 'product', e.target.value)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  >
-                    <option value="">Mahsulot tanlang</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.name}>{product.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {renderProductSearch(index)}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Miqdor</label>
                   <input
@@ -644,7 +737,7 @@ export default function WarehousePage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ombor</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yetkazib beruvchi</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sana</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text suicide-gray-500 uppercase tracking-wider">Sana</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulotlar</th>
                   {(user?.role === 'admin' || user?.role === 'omborchi') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amallar</th>
@@ -752,7 +845,7 @@ export default function WarehousePage() {
         </div>
       )}
 
-      {isEditModalOpen && (
+      {isEditModalOpen && editingWarehouse && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-96">
             <h2 className="text-lg font-medium mb-4">Ombor tahrirlash</h2>
@@ -761,8 +854,8 @@ export default function WarehousePage() {
                 <label className="block text-sm font-medium text-gray-700">Ombor nomi</label>
                 <input
                   type="text"
-                  value={editingWarehouse?.name || ''}
-                  onChange={(e) => editingWarehouse && setEditingWarehouse({ ...editingWarehouse, name: e.target.value })}
+                  value={editingWarehouse.name}
+                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, name: e.target.value })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
@@ -770,8 +863,8 @@ export default function WarehousePage() {
                 <label className="block text-sm font-medium text-gray-700">Manzil</label>
                 <input
                   type="text"
-                  value={editingWarehouse?.address || ''}
-                  onChange={(e) => editingWarehouse && setEditingWarehouse({ ...editingWarehouse, address: e.target.value })}
+                  value={editingWarehouse.address}
+                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, address: e.target.value })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
@@ -779,16 +872,16 @@ export default function WarehousePage() {
                 <label className="block text-sm font-medium text-gray-700">Joriy zaxira</label>
                 <input
                   type="number"
-                  value={editingWarehouse?.current_stock || 0}
-                  onChange={(e) => editingWarehouse && setEditingWarehouse({ ...editingWarehouse, current_stock: Number(e.target.value) })}
+                  value={editingWarehouse.current_stock}
+                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, current_stock: Number(e.target.value) })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Boshqaruvchi</label>
                 <select
-                  value={editingWarehouse ? getManagerName(editingWarehouse.responsible_person) : ''}
-                  onChange={(e) => editingWarehouse && setEditingWarehouse({ ...editingWarehouse, responsible_person: managers.find(m => m.username === e.target.value)?.id || null })}
+                  value={getManagerName(editingWarehouse.responsible_person)}
+                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, responsible_person: managers.find(m => m.username === e.target.value)?.id || null })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 >
                   <option value="">Boshqaruvchi tanlang</option>
@@ -871,19 +964,7 @@ export default function WarehousePage() {
               <h3 className="text-lg font-medium mb-4">Mahsulot qo‘shish</h3>
               {productEntries.map((entry, index) => (
                 <div key={index} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Mahsulot tanlash</label>
-                    <select
-                      value={entry.product}
-                      onChange={(e) => handleProductEntryChange(index, 'product', e.target.value)}
-                      className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    >
-                      <option value="">Mahsulot tanlang</option>
-                      {products.map((product) => (
-                        <option key={product.id} value={product.name}>{product.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {renderProductSearch(index)}
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Miqdor</label>
                     <input
