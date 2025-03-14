@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Warehouse, MapPin, Package, Search, User, Plus, Edit, Trash2 } from 'lucide-react';
+import { Warehouse, MapPin, Package, Search, User, Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 
@@ -87,8 +87,10 @@ export default function WarehousePage() {
   const [isEditPurchaseModalOpen, setIsEditPurchaseModalOpen] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [isAddSupplierModalOpen, setIsAddSupplierModalOpen] = useState(false);
+  const [isViewProductsModalOpen, setIsViewProductsModalOpen] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState<Warehouse | null>(null);
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
+  const [selectedWarehouseProducts, setSelectedWarehouseProducts] = useState<WarehouseProduct[]>([]);
   const [newWarehouse, setNewWarehouse] = useState({ name: '', address: '', current_stock: '', responsible_person: '' });
   const [newProduct, setNewProduct] = useState({ name: '', sku: '', narx: '', birlik: '', kategoriya: '' });
   const [newSupplier, setNewSupplier] = useState({ username: '', email: '', password: '', phone_number: '', address: '' });
@@ -486,6 +488,12 @@ export default function WarehousePage() {
     }
   };
 
+  const handleViewProducts = (warehouseId: number) => {
+    const products = warehouseProducts.filter((wp) => wp.ombor === warehouseId);
+    setSelectedWarehouseProducts(products);
+    setIsViewProductsModalOpen(true);
+  };
+
   const renderProductSearch = (index: number) => (
     <div className="relative">
       <label className="block text-sm font-medium text-gray-700">Mahsulot tanlash</label>
@@ -695,17 +703,13 @@ export default function WarehousePage() {
                       <td className="px-6 py-4 whitespace-nowrap">{warehouse.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{warehouse.address || 'Manzil kiritilmagan'}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{getManagerName(warehouse.responsible_person)}</td>
-                      <td className="px-6 py-4">
-                        {warehouseProducts
-                          .filter((wp) => wp.ombor === warehouse.id)
-                          .map((wp) => (
-                            <div key={wp.id}>
-                              {wp.mahsulot_name} - {wp.soni} dona
-                            </div>
-                          ))}
-                        {warehouseProducts.filter((wp) => wp.ombor === warehouse.id).length === 0 && (
-                          <div>Mahsulotlar mavjud emas</div>
-                        )}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => handleViewProducts(warehouse.id)}
+                          className="text-blue-600 hover:text-blue-900 flex items-center"
+                        >
+                          <Eye className="h-4 w-4 mr-1" /> Mahsulotlarni ko‘rish
+                        </button>
                       </td>
                       {(user?.role === 'admin' || user?.role === 'omborchi') && (
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -737,7 +741,7 @@ export default function WarehousePage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ombor</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yetkazib beruvchi</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text suicide-gray-500 uppercase tracking-wider">Sana</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sana</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulotlar</th>
                   {(user?.role === 'admin' || user?.role === 'omborchi') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amallar</th>
@@ -1170,6 +1174,48 @@ export default function WarehousePage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
                 Yetkazib beruvchi qo‘shish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isViewProductsModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-[80%] max-w-3xl">
+            <h2 className="text-lg font-medium mb-4">Ombordagi Mahsulotlar</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulot Nomi</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Miqdori</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {selectedWarehouseProducts.length > 0 ? (
+                    selectedWarehouseProducts.map((wp) => (
+                      <tr key={wp.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">{wp.mahsulot_name}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">{wp.soni} dona</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={2} className="px-6 py-4 text-center text-gray-500">
+                        Mahsulotlar mavjud emas
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setIsViewProductsModalOpen(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Yopish
               </button>
             </div>
           </div>
