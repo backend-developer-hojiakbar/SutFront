@@ -166,7 +166,7 @@ export default function WarehousePage() {
         setProductSearchQueries(productEntries.map(() => ''));
       } catch (err) {
         setError('Ma\'lumotlarni yuklashda xatolik yuz berdi');
-        console.error(err);
+        console.error('Fetch Data Error:', err);
       } finally {
         setLoading(false);
       }
@@ -178,7 +178,7 @@ export default function WarehousePage() {
   const getManagerName = (id: number | null) => {
     if (!id) return 'Belgilanmagan';
     const manager = managers.find((m) => m.id === id);
-    return manager ? manager.username : 'Belgilanmagan';
+    return manager ? manager.username : 'Noma\'lum';
   };
 
   const getWarehouseName = (id: number) => {
@@ -258,6 +258,8 @@ export default function WarehousePage() {
         }),
       };
 
+      console.log('Yuborilayotgan ma\'lumot:', purchaseData);
+
       const response = await axios.post('https://lemoonapi.cdpos.uz:444/purchases/', purchaseData, config);
       setPurchases([...purchases, response.data]);
 
@@ -277,73 +279,7 @@ export default function WarehousePage() {
       setTimeout(() => setNotification(null), 3000);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Mahsulotlarni qo‘shishda xatolik');
-      console.error(err);
-    }
-  };
-
-  const handleAddWarehouse = async () => {
-    try {
-      const config = { headers: { Authorization: `JWT ${token}` } };
-      const warehouseData = {
-        name: newWarehouse.name,
-        address: newWarehouse.address,
-        current_stock: parseInt(newWarehouse.current_stock) || 0,
-        responsible_person: managers.find(m => m.username === newWarehouse.responsible_person)?.id || user?.id,
-      };
-
-      const response = await axios.post('https://lemoonapi.cdpos.uz:444/omborlar/', warehouseData, config);
-      setWarehouses([...warehouses, response.data]);
-      setIsModalOpen(false);
-      setNewWarehouse({ name: '', address: '', current_stock: '', responsible_person: '' });
-      setNotification('Ombor muvaffaqiyatli qo‘shildi!');
-      setTimeout(() => setNotification(null), 3000);
-    } catch (err) {
-      setError('Ombor qo‘shishda xatolik');
-      console.error(err);
-    }
-  };
-
-  const handleEditWarehouse = (warehouse: Warehouse) => {
-    setEditingWarehouse(warehouse);
-    setIsEditModalOpen(true);
-  };
-
-  const handleUpdateWarehouse = async () => {
-    if (!editingWarehouse) return;
-
-    try {
-      const config = { headers: { Authorization: `JWT ${token}` } };
-      const updatedData = {
-        name: editingWarehouse.name,
-        address: editingWarehouse.address,
-        current_stock: editingWarehouse.current_stock,
-        responsible_person: editingWarehouse.responsible_person || user?.id,
-      };
-
-      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
-      setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
-      setIsEditModalOpen(false);
-      setEditingWarehouse(null);
-      setNotification('Ombor muvaffaqiyatli yangilandi!');
-      setTimeout(() => setNotification(null), 3000);
-    } catch (err) {
-      setError('Ombor yangilashda xatolik');
-      console.error(err);
-    }
-  };
-
-  const handleDeleteWarehouse = async (id: number) => {
-    if (window.confirm('Ushbu omborni o‘chirishni xohlaysizmi?')) {
-      try {
-        const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
-        setWarehouses(warehouses.filter(w => w.id !== id));
-        setNotification('Ombor muvaffaqiyatli o‘chirildi!');
-        setTimeout(() => setNotification(null), 3000);
-      } catch (err) {
-        setError('Ombor o‘chirishda xatolik');
-        console.error(err);
-      }
+      console.error('Add Purchase Error:', err.response?.data || err.message);
     }
   };
 
@@ -395,6 +331,8 @@ export default function WarehousePage() {
         }),
       };
 
+      console.log('Yangilanayotgan ma\'lumot:', purchaseData);
+
       const response = await axios.put(`https://lemoonapi.cdpos.uz:444/purchases/${editingPurchase.id}/`, purchaseData, config);
       setPurchases(purchases.map(p => (p.id === editingPurchase.id ? response.data : p)));
 
@@ -421,10 +359,18 @@ export default function WarehousePage() {
   };
 
   const handleDeletePurchase = async (id: number) => {
+    if (!id) {
+      setError('O‘chirish uchun buyurtma ID topilmadi');
+      console.error('Delete Purchase Error: ID is missing');
+      return;
+    }
+
     if (window.confirm('Ushbu buyurtmani o‘chirishni xohlaysizmi?')) {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
-        await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
+        console.log(`O'chirilayotgan buyurtma ID: ${id}`);
+        const response = await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
+        console.log('Delete Response:', response.status); // 204 bo‘lishi kerak
         setPurchases(purchases.filter(p => p.id !== id));
 
         const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
@@ -437,8 +383,79 @@ export default function WarehousePage() {
         setNotification('Buyurtma muvaffaqiyatli o‘chirildi!');
         setTimeout(() => setNotification(null), 3000);
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Buyurtmani o‘chirishda xatolik');
-        console.error('Delete Purchase Error:', err.response?.data || err.message);
+        const errorDetail = err.response?.data?.detail || 'Buyurtmani o‘chirishda xatolik';
+        setError(errorDetail);
+        console.error('Delete Purchase Error:', {
+          status: err.response?.status,
+          data: err.response?.data,
+          message: err.message,
+        });
+      }
+    }
+  };
+
+  const handleAddWarehouse = async () => {
+    try {
+      const config = { headers: { Authorization: `JWT ${token}` } };
+      const warehouseData = {
+        name: newWarehouse.name,
+        address: newWarehouse.address,
+        current_stock: parseInt(newWarehouse.current_stock) || 0,
+        responsible_person: managers.find(m => m.username === newWarehouse.responsible_person)?.id || null,
+      };
+
+      const response = await axios.post('https://lemoonapi.cdpos.uz:444/omborlar/', warehouseData, config);
+      setWarehouses([...warehouses, response.data]);
+      setIsModalOpen(false);
+      setNewWarehouse({ name: '', address: '', current_stock: '', responsible_person: '' });
+      setNotification('Ombor muvaffaqiyatli qo‘shildi!');
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err) {
+      setError('Ombor qo‘shishda xatolik');
+      console.error('Add Warehouse Error:', err);
+    }
+  };
+
+  const handleEditWarehouse = (warehouse: Warehouse) => {
+    setEditingWarehouse(warehouse);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateWarehouse = async () => {
+    if (!editingWarehouse) return;
+
+    try {
+      const config = { headers: { Authorization: `JWT ${token}` } };
+      const updatedData = {
+        name: editingWarehouse.name,
+        address: editingWarehouse.address,
+        current_stock: editingWarehouse.current_stock,
+        responsible_person: editingWarehouse.responsible_person || null,
+      };
+
+      const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
+      setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
+      setIsEditModalOpen(false);
+      setEditingWarehouse(null);
+      setNotification('Ombor muvaffaqiyatli yangilandi!');
+      setTimeout(() => setNotification(null), 3000);
+    } catch (err) {
+      setError('Ombor yangilashda xatolik');
+      console.error('Update Warehouse Error:', err);
+    }
+  };
+
+  const handleDeleteWarehouse = async (id: number) => {
+    if (window.confirm('Ushbu omborni o‘chirishni xohlaysizmi?')) {
+      try {
+        const config = { headers: { Authorization: `JWT ${token}` } };
+        await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
+        setWarehouses(warehouses.filter(w => w.id !== id));
+        setNotification('Ombor muvaffaqiyatli o‘chirildi!');
+        setTimeout(() => setNotification(null), 3000);
+      } catch (err) {
+        setError('Ombor o‘chirishda xatolik');
+        console.error('Delete Warehouse Error:', err);
       }
     }
   };
@@ -464,7 +481,7 @@ export default function WarehousePage() {
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Yangi mahsulot qo‘shishda xatolik');
-      console.error(err);
+      console.error('Add Product Error:', err);
     }
   };
 
@@ -484,7 +501,7 @@ export default function WarehousePage() {
       setTimeout(() => setNotification(null), 3000);
     } catch (err) {
       setError('Yetkazib beruvchi qo‘shishda xatolik yuz berdi');
-      console.error(err);
+      console.error('Add Supplier Error:', err);
     }
   };
 
@@ -495,7 +512,7 @@ export default function WarehousePage() {
   };
 
   const renderProductSearch = (index: number) => (
-    <div className="relative">
+    <div className="relative" key={`product-search-${index}`}>
       <label className="block text-sm font-medium text-gray-700">Mahsulot tanlash</label>
       <input
         type="text"
@@ -621,7 +638,7 @@ export default function WarehousePage() {
               </button>
             </div>
             {productEntries.map((entry, index) => (
-              <div key={index} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
+              <div key={`product-entry-${index}`} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
                 {renderProductSearch(index)}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Miqdor</label>
@@ -713,14 +730,18 @@ export default function WarehousePage() {
                       </td>
                       {(user?.role === 'admin' || user?.role === 'omborchi') && (
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <button onClick={() => handleEditWarehouse(warehouse)} className="text-blue-600 hover:text-blue-900 mr-2">Tahrirlash</button>
-                          <button onClick={() => handleDeleteWarehouse(warehouse.id)} className="text-red-600 hover:text-red-900">O‘chirish</button>
+                          <button onClick={() => handleEditWarehouse(warehouse)} className="text-blue-600 hover:text-blue-900 mr-2">
+                            <Edit className="h-4 w-4 inline" /> Tahrirlash
+                          </button>
+                          <button onClick={() => handleDeleteWarehouse(warehouse.id)} className="text-red-600 hover:text-red-900">
+                            <Trash2 className="h-4 w-4 inline" /> O‘chirish
+                          </button>
                         </td>
                       )}
                     </tr>
                   ))
                 ) : (
-                  <tr>
+                  <tr key="no-warehouses">
                     <td colSpan={user?.role === 'admin' || user?.role === 'omborchi' ? 5 : 4} className="px-6 py-4 text-center text-gray-500">
                       Omborlar mavjud emas
                     </td>
@@ -756,8 +777,10 @@ export default function WarehousePage() {
                       <td className="px-6 py-4 whitespace-nowrap">{getManagerName(purchase.yetkazib_beruvchi)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{purchase.sana}</td>
                       <td className="px-6 py-4">
-                        {purchase.items.map(item => (
-                          <div key={item.id}>{item.mahsulot.name} - {item.soni} dona - {item.narx} UZS</div>
+                        {purchase.items.map((item, index) => (
+                          <div key={item.id || `item-${purchase.id}-${index}`}>
+                            {item.mahsulot.name} - {item.soni} dona - {item.narx} UZS
+                          </div>
                         ))}
                       </td>
                       {(user?.role === 'admin' || user?.role === 'omborchi') && (
@@ -773,7 +796,7 @@ export default function WarehousePage() {
                     </tr>
                   ))
                 ) : (
-                  <tr>
+                  <tr key="no-purchases">
                     <td colSpan={user?.role === 'admin' || user?.role === 'omborchi' ? 5 : 4} className="px-6 py-4 text-center text-gray-500">
                       Tranzaksiyalar mavjud emas
                     </td>
@@ -913,7 +936,7 @@ export default function WarehousePage() {
         </div>
       )}
 
-      {isEditPurchaseModalOpen && (
+      {isEditPurchaseModalOpen && editingPurchase && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-[80%] max-w-4xl">
             <h2 className="text-lg font-medium mb-4">Buyurtmani tahrirlash</h2>
@@ -965,9 +988,9 @@ export default function WarehousePage() {
               </div>
             </div>
             <div className="mt-6">
-              <h3 className="text-lg font-medium mb-4">Mahsulot qo‘shish</h3>
+              <h3 className="text-lg font-medium mb-4">Mahsulotlar</h3>
               {productEntries.map((entry, index) => (
-                <div key={index} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
+                <div key={`edit-product-entry-${index}`} className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-4 items-end">
                   {renderProductSearch(index)}
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Miqdor</label>
@@ -1201,7 +1224,7 @@ export default function WarehousePage() {
                       </tr>
                     ))
                   ) : (
-                    <tr>
+                    <tr key="no-products">
                       <td colSpan={2} className="px-6 py-4 text-center text-gray-500">
                         Mahsulotlar mavjud emas
                       </td>

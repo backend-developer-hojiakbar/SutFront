@@ -16,13 +16,13 @@ import { useAuthStore } from '../store/authStore';
 
 const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Warehouse', href: '/warehouse', icon: Package },
-  { name: 'Dealers', href: '/dealers', icon: Users },
-  { name: 'Shops', href: '/shops', icon: Store },
-  { name: 'Sales', href: '/sales', icon: ShoppingCart },
-  { name: 'Reports', href: '/reports', icon: FileText },
-  { name: 'Settings', href: '/settings', icon: Settings },
-  { name: 'Products', href: '/products', icon: Package },
+  { name: 'Ombor', href: '/warehouse', icon: Package },
+  { name: 'Dillerlar', href: '/dealers', icon: Users },
+  { name: "Do'konlar", href: '/shops', icon: Store },
+  { name: 'Sotuvlar', href: '/sales', icon: ShoppingCart },
+  { name: 'Hisobotlar', href: '/reports', icon: FileText },
+  { name: 'Sozlamalar', href: '/settings', icon: Settings },
+  { name: 'Mahsulotlar', href: '/products', icon: Package },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

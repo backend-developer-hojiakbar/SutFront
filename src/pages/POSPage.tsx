@@ -407,7 +407,7 @@ const POSPage: React.FC = () => {
                 />
               </div>
               <button
-                className="mt-6 bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600"
+                className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
                 onClick={openPriceModal}
                 disabled={!selectedProduct}
               >

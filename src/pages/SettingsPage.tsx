@@ -16,6 +16,8 @@ const SettingsPage: React.FC = () => {
   const [editCategoryId, setEditCategoryId] = useState<number | null>(null);
   const [newUnitName, setNewUnitName] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const apiConfig = {
     headers: { Authorization: `JWT ${token}` },
@@ -40,7 +42,6 @@ const SettingsPage: React.FC = () => {
           const categoriesRes = await axios.get(`${BASE_URL}kategoriyalar/`, apiConfig);
           setCategories(categoriesRes.data.results || categoriesRes.data);
         }
-
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik');
       } finally {
@@ -59,6 +60,29 @@ const SettingsPage: React.FC = () => {
       alert('Ma\'lumotlar muvaffaqiyatli yangilandi');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ma\'lumotlarni yangilashda xatolik');
+    }
+  };
+
+  const handlePasswordUpdate = async () => {
+    if (newPassword !== confirmPassword) {
+      setError('Parollar mos kelmaydi');
+      return;
+    }
+    if (!newPassword) {
+      setError('Yangi parol kiritilmadi');
+      return;
+    }
+
+    try {
+      const passwordData = {
+        password: newPassword,
+      };
+      await axios.put(`${BASE_URL}users/${userData.id}/`, { ...userData, ...passwordData }, apiConfig);
+      setNewPassword('');
+      setConfirmPassword('');
+      alert('Parol muvaffaqiyatli yangilandi');
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Parolni yangilashda xatolik');
     }
   };
 
@@ -191,6 +215,34 @@ const SettingsPage: React.FC = () => {
                   <button onClick={handleUserUpdate} className="save-button">
                     Saqlash
                   </button>
+
+                  {/* Parol yangilash */}
+                  <div className="mt-6">
+                    <h4 className="text-md font-medium text-gray-700 mb-2">Parolni yangilash</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Yangi parol</label>
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Parolni tasdiqlash</label>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="input-field"
+                        />
+                      </div>
+                      <button onClick={handlePasswordUpdate} className="save-button">
+                        Parolni yangilash
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
