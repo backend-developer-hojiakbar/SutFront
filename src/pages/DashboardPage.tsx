@@ -7,6 +7,7 @@ import {
   FileText,
   TrendingUp,
   Undo2,
+  ShoppingCart,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
@@ -14,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
+// Interfeyslar (oldingi kod bilan bir xil)
 interface Sale {
   id: number;
   sana: string;
@@ -74,12 +76,14 @@ export default function DashboardPage() {
     totalShops: 0,
     totalSales: 0,
     totalReturns: 0,
+    totalPurchases: 0,
   });
-  const [sales, setSales] = useState<Sale[]>([]); // Barcha sotuvlar (filtersiz)
-  const [filteredSales, setFilteredSales] = useState<Sale[]>([]); // Filtrlangan sotuvlar
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [filteredSales, setFilteredSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]); // Barcha qaytarishlar (filtersiz)
-  const [filteredReturns, setFilteredReturns] = useState<Return[]>([]); // Filtrlangan qaytarishlar
+  const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
+  const [returns, setReturns] = useState<Return[]>([]);
+  const [filteredReturns, setFilteredReturns] = useState<Return[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -93,8 +97,10 @@ export default function DashboardPage() {
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [currentPageSales, setCurrentPageSales] = useState(1);
   const [currentPageReturns, setCurrentPageReturns] = useState(1);
+  const [currentPagePurchases, setCurrentPagePurchases] = useState(1);
   const [salesFilter, setSalesFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
   const [returnsFilter, setReturnsFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
+  const [purchasesFilter, setPurchasesFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
   const itemsPerPage = 5;
 
   const fetchPaginatedData = async (url: string): Promise<any[]> => {
@@ -127,12 +133,10 @@ export default function DashboardPage() {
     setError(null);
 
     try {
-      // Mahsulotlar
       const productsData = await fetchPaginatedData(`${BASE_URL}mahsulotlar/`);
       const totalProducts = productsData.length;
       setProducts(productsData);
 
-      // Foydalanuvchilar
       const usersData = await fetchPaginatedData(`${BASE_URL}users/`);
       setUsers(usersData);
       const totalDealers = user.role === 'admin' ? usersData.filter((u: any) => u.user_type === 'dealer').length : 0;
@@ -142,7 +146,6 @@ export default function DashboardPage() {
         ? usersData.filter((u: any) => u.user_type === 'shop').length
         : 0;
 
-      // Barcha sotuvlar (filtersiz)
       const salesData = await fetchPaginatedData(`${BASE_URL}sotuvlar/`);
       let filteredSalesData = [...salesData];
       if (user.role === 'dealer') {
@@ -156,7 +159,6 @@ export default function DashboardPage() {
       filteredSalesData.sort((a: Sale, b: Sale) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
       setSales(filteredSalesData);
 
-      // Barcha qaytarishlar (filtersiz)
       const returnsData = await fetchPaginatedData(`${BASE_URL}sotuv_qaytarish/`);
       let filteredReturnsData = [...returnsData];
       if (user.role === 'dealer' || user.role === 'shop') {
@@ -165,24 +167,25 @@ export default function DashboardPage() {
       filteredReturnsData.sort((a: Return, b: Return) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
       setReturns(filteredReturnsData);
 
-      // Omborlar
       const warehousesData = await fetchPaginatedData(`${BASE_URL}omborlar/`);
       setWarehouses(warehousesData);
 
-      // Xaridlar
       const purchasesData = await fetchPaginatedData(`${BASE_URL}purchases/`);
       let filteredPurchasesData = [...purchasesData];
       if (user.role === 'dealer' || user.role === 'shop') {
-        filteredPurchasesData = filteredPurchasesData.filter((p: Purchase) => p.created_by === user.id);
+        filteredPurchasesData = filteredPurchasesData.filter((p: Purchase) => p.yetkazib_beruvchi === user.id);
       }
+      filteredPurchasesData.sort((a: Purchase, b: Purchase) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
       setPurchases(filteredPurchasesData);
+      setFilteredPurchases(filteredPurchasesData); // Dastlabki holatda barcha xaridlar ko‘rsatiladi
 
       setStats({
         totalProducts,
         totalDealers,
         totalShops,
-        totalSales: 0, // Filter orqali yangilanadi
-        totalReturns: 0, // Filter orqali yangilanadi
+        totalSales: 0,
+        totalReturns: 0,
+        totalPurchases: filteredPurchasesData.reduce((sum, purchase) => sum + parseFloat(purchase.total_sum || '0'), 0),
       });
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
@@ -196,7 +199,6 @@ export default function DashboardPage() {
     if (token) fetchData();
   }, [token, user]);
 
-  // Filtrlangan sotuvlar
   useEffect(() => {
     const fetchFilteredSales = async () => {
       try {
@@ -229,7 +231,6 @@ export default function DashboardPage() {
     if (token) fetchFilteredSales();
   }, [salesFilter, token, user, users]);
 
-  // Filtrlangan qaytarishlar
   useEffect(() => {
     const fetchFilteredReturns = async () => {
       try {
@@ -257,7 +258,57 @@ export default function DashboardPage() {
     if (token) fetchFilteredReturns();
   }, [returnsFilter, token, user]);
 
-  // Sana formatlash (Toshkent vaqti UTC+5)
+  // Frontendda sana bo‘yicha filtr
+  useEffect(() => {
+    const filterPurchasesByDate = () => {
+      const now = new Date();
+      let filtered = [...purchases];
+
+      switch (purchasesFilter) {
+        case 'today': {
+          const today = new Date(now.setHours(0, 0, 0, 0));
+          filtered = purchases.filter((p) => new Date(p.sana) >= today);
+          break;
+        }
+        case 'yesterday': {
+          const yesterday = new Date(now.setHours(0, 0, 0, 0));
+          yesterday.setDate(yesterday.getDate() - 1);
+          filtered = purchases.filter(
+            (p) => new Date(p.sana) >= yesterday && new Date(p.sana) < new Date(now.setHours(0, 0, 0, 0))
+          );
+          break;
+        }
+        case 'last_7_days': {
+          const last7Days = new Date(now.setHours(0, 0, 0, 0));
+          last7Days.setDate(last7Days.getDate() - 7);
+          filtered = purchases.filter((p) => new Date(p.sana) >= last7Days);
+          break;
+        }
+        case 'this_month': {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          filtered = purchases.filter((p) => new Date(p.sana) >= startOfMonth);
+          break;
+        }
+        case 'this_year': {
+          const startOfYear = new Date(now.getFullYear(), 0, 1);
+          filtered = purchases.filter((p) => new Date(p.sana) >= startOfYear);
+          break;
+        }
+        default:
+          filtered = purchases;
+      }
+
+      setFilteredPurchases(filtered);
+      const totalPurchases = filtered.reduce((sum, purchase) => sum + parseFloat(purchase.total_sum || '0'), 0);
+      setStats((prevStats) => ({
+        ...prevStats,
+        totalPurchases,
+      }));
+    };
+
+    filterPurchasesByDate();
+  }, [purchasesFilter, purchases]);
+
   const formatToTashkentTime = (dateString: string | null) => {
     const date = dateString ? new Date(dateString) : new Date();
     const offsetMinutes = 5 * 60; // UTC+5
@@ -332,12 +383,27 @@ export default function DashboardPage() {
     if (currentPageReturns < totalPagesReturns) setCurrentPageReturns(currentPageReturns + 1);
   };
 
+  const totalPagesPurchases = Math.ceil(filteredPurchases.length / itemsPerPage);
+  const paginatedPurchases = filteredPurchases.slice((currentPagePurchases - 1) * itemsPerPage, currentPagePurchases * itemsPerPage);
+
+  const handlePreviousPagePurchases = () => {
+    if (currentPagePurchases > 1) setCurrentPagePurchases(currentPagePurchases - 1);
+  };
+
+  const handleNextPagePurchases = () => {
+    if (currentPagePurchases < totalPagesPurchases) setCurrentPagePurchases(currentPagePurchases + 1);
+  };
+
   const handleSalesFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSalesFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
   };
 
   const handleReturnsFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setReturnsFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
+  };
+
+  const handlePurchasesFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setPurchasesFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
   };
 
   if (loading) {
@@ -577,6 +643,106 @@ export default function DashboardPage() {
                   currentPageReturns === totalPagesReturns
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                Keyingi
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* So‘nggi harajatlar bo‘limi */}
+      <div className="mt-8">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center">
+              <ShoppingCart className="w-6 h-6 text-orange-600 mr-2" />
+              <h3 className="text-xl font-semibold text-gray-900">So‘nggi harajatlar</h3>
+            </div>
+          </div>
+          <div className="flex items-center justify-between mb-6">
+            <span className="text-2xl font-semibold text-orange-600">
+              Umumiy harajatlar: {stats.totalPurchases.toLocaleString()} UZS
+            </span>
+            <div className="relative w-48">
+              <select
+                value={purchasesFilter}
+                onChange={handlePurchasesFilterChange}
+                className="appearance-none w-full p-2.5 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm"
+              >
+                <option value="today">Bugun</option>
+                <option value="yesterday">Kuni kecha</option>
+                <option value="last_7_days">Oxirgi 7 kun</option>
+                <option value="this_month">Ushbu oy</option>
+                <option value="this_year">Ushbu yil</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {paginatedPurchases.length > 0 ? (
+              paginatedPurchases.map((purchase) => (
+                <div
+                  key={purchase.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg shadow-sm hover:bg-orange-50 transition-colors duration-200 border border-gray-100"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 bg-orange-100 rounded-full">
+                      <ShoppingCart className="w-5 h-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p
+                        className="font-semibold text-gray-800 cursor-pointer hover:text-orange-600 transition-colors duration-150"
+                        onClick={() => handlePurchaseClick(purchase)}
+                      >
+                        Xarid #{purchase.id}
+                      </p>
+                      <p className="text-sm text-gray-600">{getSupplierName(purchase.yetkazib_beruvchi)}</p>
+                      <p className="text-xs text-gray-500">{formatToTashkentTime(purchase.sana)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-orange-600">
+                      {parseFloat(purchase.total_sum || '0').toLocaleString()} UZS
+                    </p>
+                    <p className="text-xs text-gray-500">{getWarehouseName(purchase.ombor)}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>So‘nggi harajatlar mavjud emas</p>
+              </div>
+            )}
+          </div>
+          {filteredPurchases.length > itemsPerPage && (
+            <div className="mt-6 flex justify-between items-center">
+              <button
+                onClick={handlePreviousPagePurchases}
+                disabled={currentPagePurchases === 1}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  currentPagePurchases === 1
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-orange-600 text-white hover:bg-orange-700 transition-colors duration-200'
+                }`}
+              >
+                Oldingi
+              </button>
+              <span className="text-sm text-gray-600 font-medium">
+                {currentPagePurchases} / {totalPagesPurchases}
+              </span>
+              <button
+                onClick={handleNextPagePurchases}
+                disabled={currentPagePurchases === totalPagesPurchases}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  currentPagePurchases === totalPagesPurchases
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-orange-600 text-white hover:bg-orange-700 transition-colors duration-200'
                 }`}
               >
                 Keyingi
