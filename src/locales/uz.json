@@ -1,0 +1,42 @@
+{
+  "common": {
+    "save": "Saqlash",
+    "cancel": "Bekor qilish",
+    "delete": "O'chirish",
+    "edit": "Tahrirlash",
+    "add": "Qo'shish",
+    "search": "Qidirish"
+  },
+  "dealer": {
+    "title": "Dillerlar",
+    "name": "Nomi",
+    "phone": "Telefon",
+    "address": "Manzil",
+    "status": "Holati",
+    "active": "Faol",
+    "inactive": "Nofaol",
+    "tradeLicense": "Savdo litsenziyasi",
+    "taxInfo": "Soliq ma'lumoti"
+  },
+  "shop": {
+    "title": "Do'konlar",
+    "name": "Nomi",
+    "address": "Manzil",
+    "phone": "Telefon",
+    "dealer": "Diller",
+    "status": "Holati",
+    "inventory": "Inventarizatsiya"
+  },
+  "sales": {
+    "title": "Sotuvlar",
+    "product": "Mahsulot",
+    "quantity": "Miqdori",
+    "price": "Narxi",
+    "total": "Jami",
+    "date": "Sana",
+    "status": "Holati"
+  },
+  "currency": {
+    "uzs": "so'm"
+  }
+}
