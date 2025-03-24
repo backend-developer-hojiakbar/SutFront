@@ -3,7 +3,7 @@ import { ShoppingCart, Trash2, Printer } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 import html2pdf from 'html2pdf.js';
-import Barcode from 'react-barcode'; // Barcode uchun kutubxona (npm install react-barcode)
+import Barcode from 'react-barcode';
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
@@ -17,7 +17,7 @@ interface Product {
 interface CartItem {
   productId: number;
   quantity: number;
-  price: number; // Bu narx mahsulotning o‘zgartirilgan yoki asl narxi bo‘ladi
+  price: number;
 }
 
 interface Ombor {
@@ -39,6 +39,7 @@ interface Sale {
   sotib_oluvchi: number;
   total_sum: string;
   ombor: number;
+  time: string;
   items: { mahsulot: number; soni: number; narx: string }[];
 }
 
@@ -57,8 +58,8 @@ const POSPage: React.FC = () => {
   const [totalSum, setTotalSum] = useState(0);
   const [saleReceipt, setSaleReceipt] = useState<Sale | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false); // Narx o‘zgartirish modali uchun
-  const [customPrice, setCustomPrice] = useState<number>(0); // O‘zgartirilgan narx uchun
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [customPrice, setCustomPrice] = useState<number>(0);
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const apiConfig = {
@@ -82,7 +83,10 @@ const POSPage: React.FC = () => {
 
       const usersRes = await axios.get(`${BASE_URL}users/`, apiConfig);
       let usersData = usersRes.data.results || usersRes.data;
-      if (user.role === 'dealer') {
+
+      if (user.role === 'admin') {
+        usersData = usersData.filter((u: User) => u.user_type === 'dealer');
+      } else if (user.role === 'dealer') {
         usersData = usersData.filter((u: User) => u.user_type === 'shop' && u.created_by === user.id);
       } else if (user.role === 'shop') {
         usersData = [user];
@@ -102,11 +106,10 @@ const POSPage: React.FC = () => {
         return {
           ...product,
           narx: typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx,
-          stock: omborMahsulot ? omborMahsulot.soni : 0
+          stock: omborMahsulot ? omborMahsulot.soni : 0,
         };
       });
       setProducts(enrichedProducts);
-
     } catch (err: any) {
       console.error('Ma\'lumotlarni yuklashda xatolik:', err.response?.data || err.message);
       setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
@@ -120,7 +123,7 @@ const POSPage: React.FC = () => {
   }, [token, user]);
 
   const openPriceModal = () => {
-    const product = products.find(p => p.id === selectedProduct);
+    const product = products.find((p) => p.id === selectedProduct);
     if (product) {
       setCustomPrice(typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
       setIsPriceModalOpen(true);
@@ -143,7 +146,7 @@ const POSPage: React.FC = () => {
       return;
     }
 
-    const product = products.find(p => p.id === selectedProduct);
+    const product = products.find((p) => p.id === selectedProduct);
     if (!product) {
       setError('Mahsulot topilmadi');
       return;
@@ -156,17 +159,19 @@ const POSPage: React.FC = () => {
 
     const priceToUse = customPrice || (typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
 
-    const existingItem = cart.find(item => item.productId === selectedProduct);
+    const existingItem = cart.find((item) => item.productId === selectedProduct);
     if (existingItem) {
-      setCart(cart.map(item =>
-        item.productId === selectedProduct
-          ? { ...item, quantity: item.quantity + quantity, price: priceToUse }
-          : item
-      ));
+      setCart(
+        cart.map((item) =>
+          item.productId === selectedProduct
+            ? { ...item, quantity: item.quantity + quantity, price: priceToUse }
+            : item
+        )
+      );
     } else {
       setCart([...cart, { productId: selectedProduct, quantity, price: priceToUse }]);
     }
-    setTotalSum(cart.reduce((sum, item) => sum + (item.quantity * item.price), 0) + (quantity * priceToUse));
+    setTotalSum(cart.reduce((sum, item) => sum + item.quantity * item.price, 0) + quantity * priceToUse);
     setSelectedProduct(null);
     setQuantity(1);
     setSearchQuery('');
@@ -179,11 +184,11 @@ const POSPage: React.FC = () => {
   };
 
   const removeFromCart = (productId: number) => {
-    const item = cart.find(i => i.productId === productId);
+    const item = cart.find((i) => i.productId === productId);
     if (item) {
-      setTotalSum(totalSum - (item.quantity * item.price));
+      setTotalSum(totalSum - item.quantity * item.price);
     }
-    setCart(cart.filter(item => item.productId !== productId));
+    setCart(cart.filter((item) => item.productId !== productId));
   };
 
   const processSale = async () => {
@@ -206,15 +211,17 @@ const POSPage: React.FC = () => {
     }
 
     try {
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatida sana
       const sotuvData = {
         sotib_oluvchi: selectedBuyer,
         ombor: userOmbor.id,
+        sana: currentDate, // Aniqlik kiritildi: sana qo‘shildi
         total_sum: parseFloat(totalSum.toFixed(2)),
-        items: cart.map(item => ({
+        items: cart.map((item) => ({
           mahsulot: item.productId,
           soni: item.quantity,
-          narx: parseFloat(item.price.toFixed(2))
-        }))
+          narx: parseFloat(item.price.toFixed(2)),
+        })),
       };
 
       console.log("Yuborilayotgan sotuv ma'lumoti (/sotuvlar/):", sotuvData);
@@ -223,15 +230,16 @@ const POSPage: React.FC = () => {
 
       const sale: Sale = {
         id: sotuvRes.data.id,
-        sana: new Date().toISOString().split('T')[0],
+        sana: sotuvRes.data.sana || currentDate, // Backend’dan kelmasa default sana
         sotib_oluvchi: selectedBuyer,
         total_sum: totalSum.toFixed(2),
         ombor: userOmbor.id,
-        items: sotuvData.items.map(item => ({
+        time: sotuvRes.data.time || new Date().toISOString(), // Backend’dan `time` olish
+        items: sotuvData.items.map((item) => ({
           mahsulot: item.mahsulot,
           soni: item.soni,
-          narx: item.narx.toString()
-        }))
+          narx: item.narx.toString(),
+        })),
       };
       setSaleReceipt(sale);
       setIsReceiptModalOpen(true);
@@ -255,7 +263,7 @@ const POSPage: React.FC = () => {
       filename: `receipt_sotuv_${saleReceipt.id}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
     };
 
     html2pdf().from(receiptRef.current).set(opt).save();
@@ -292,12 +300,12 @@ const POSPage: React.FC = () => {
   };
 
   const getUsername = (userId: number) => {
-    const user = users.find(u => u.id === userId);
+    const user = users.find((u) => u.id === userId);
     return user ? user.username : `Foydalanuvchi #${userId}`;
   };
 
   const getProductName = (productId: number) => {
-    const product = products.find(p => p.id === productId);
+    const product = products.find((p) => p.id === productId);
     return product ? product.name : `Mahsulot #${productId}`;
   };
 
@@ -348,7 +356,7 @@ const POSPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  const foundProduct = products.find(p =>
+                  const foundProduct = products.find((p) =>
                     p.name.toLowerCase().includes(e.target.value.toLowerCase()) ||
                     p.id.toString().includes(e.target.value)
                   );
@@ -360,11 +368,11 @@ const POSPage: React.FC = () => {
               {searchQuery && (
                 <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                   {products
-                    .filter(p =>
+                    .filter((p) =>
                       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                       p.id.toString().includes(searchQuery)
                     )
-                    .map(product => (
+                    .map((product) => (
                       <div
                         key={product.id}
                         className="p-2 hover:bg-gray-100 cursor-pointer"
@@ -383,7 +391,7 @@ const POSPage: React.FC = () => {
 
             {selectedProduct && (
               <div className="text-sm font-medium">
-                Tanlangan: {products.find(p => p.id === selectedProduct)?.name}
+                Tanlangan: {products.find((p) => p.id === selectedProduct)?.name}
               </div>
             )}
             <div>
@@ -402,7 +410,15 @@ const POSPage: React.FC = () => {
                 <input
                   type="number"
                   className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
-                  value={customPrice > 0 ? customPrice : (selectedProduct ? (typeof products.find(p => p.id === selectedProduct)?.narx === 'string' ? parseFloat(products.find(p => p.id === selectedProduct)?.narx || '0') : products.find(p => p.id === selectedProduct)?.narx || 0) : 0)}
+                  value={
+                    customPrice > 0
+                      ? customPrice
+                      : selectedProduct
+                      ? typeof products.find((p) => p.id === selectedProduct)?.narx === 'string'
+                        ? parseFloat(products.find((p) => p.id === selectedProduct)?.narx || '0')
+                        : products.find((p) => p.id === selectedProduct)?.narx || 0
+                      : 0
+                  }
                   disabled
                 />
               </div>
@@ -434,11 +450,11 @@ const POSPage: React.FC = () => {
             ) : (
               <>
                 <div className="space-y-2">
-                  {cart.map(item => (
+                  {cart.map((item) => (
                     <div key={item.productId} className="flex justify-between items-center">
                       <div>
                         <div className="font-medium">
-                          {products.find(p => p.id === item.productId)?.name}
+                          {products.find((p) => p.id === item.productId)?.name}
                         </div>
                         <div className="text-sm text-gray-500">
                           {item.quantity} x {item.price.toLocaleString()} UZS
@@ -520,7 +536,7 @@ const POSPage: React.FC = () => {
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
             <h2 className="text-lg font-medium mb-4">Sotuv Muvaffaqiyatli Yakunlandi!</h2>
             <p className="mb-4 text-gray-600">Chekni quyida ko‘rib chiqing va boshqarishingiz mumkin:</p>
-            
+
             <div ref={receiptRef} className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
               <div className="receipt">
                 <div className="header">
@@ -529,6 +545,7 @@ const POSPage: React.FC = () => {
                     <p>Kassa raqami: {saleReceipt.id}</p>
                     <p>Sana: {new Date(saleReceipt.sana).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                   </div>
+                  <p>Vaqt: {new Date(saleReceipt.time).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
                   <p>Kassa: {user?.username || 'Noma\'lum'}</p>
                 </div>
                 <div className="items">

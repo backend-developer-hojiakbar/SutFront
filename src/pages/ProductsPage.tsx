@@ -83,7 +83,7 @@ const ProductsPage: React.FC = () => {
           console.log('Backend’dan kelgan next URL:', nextUrl);
 
           while (nextUrl) {
-            let correctedNextUrl = nextUrl; // Har safar yangi qiymat olish uchun let ishlatamiz
+            let correctedNextUrl = nextUrl;
             const urlObj = new URL(nextUrl);
             correctedNextUrl = `${BASE_URL}mahsulotlar/${urlObj.search}`;
             console.log('To‘g‘rilangan next URL:', correctedNextUrl);
@@ -109,7 +109,6 @@ const ProductsPage: React.FC = () => {
         const categoriesRes = await axios.get(`${BASE_URL}kategoriyalar/`, apiConfig);
         const categoriesData = Array.isArray(categoriesRes.data.results) ? categoriesRes.data.results : categoriesRes.data;
         setCategories(categoriesData);
-
       } catch (err: any) {
         console.error('Error fetching data:', err.message);
         if (err.response) {
@@ -194,9 +193,10 @@ const ProductsPage: React.FC = () => {
   const handleEditProduct = (product: Product) => {
     setEditProduct({
       ...product,
-      birlik: typeof product.birlik === 'number' ? units.find(u => u.id === product.birlik) || null : product.birlik,
-      kategoriya: typeof product.kategoriya === 'number' ? categories.find(c => c.id === product.kategoriya) || null : product.kategoriya,
+      birlik: typeof product.birlik === 'number' ? product.birlik : (product.birlik?.id || null),
+      kategoriya: typeof product.kategoriya === 'number' ? product.kategoriya : (product.kategoriya?.id || null),
     });
+    setPreviewImage(product.rasm ? getImageUrl(product.rasm) : null);
   };
 
   const handleUpdateProduct = async () => {
@@ -210,11 +210,11 @@ const ProductsPage: React.FC = () => {
       formData.append('name', editProduct.name);
       formData.append('sku', editProduct.sku);
       formData.append('narx', editProduct.narx);
-      const selectedBirlikId = newProduct.birlik || (editProduct.birlik && (typeof editProduct.birlik === 'number' ? editProduct.birlik : editProduct.birlik.id));
-      const selectedKategoriyaId = newProduct.kategoriya || (editProduct.kategoriya && (typeof editProduct.kategoriya === 'number' ? editProduct.kategoriya : editProduct.kategoriya.id));
+      const selectedBirlikId = editProduct.birlik && (typeof editProduct.birlik === 'number' ? editProduct.birlik : editProduct.birlik?.id);
+      const selectedKategoriyaId = editProduct.kategoriya && (typeof editProduct.kategoriya === 'number' ? editProduct.kategoriya : editProduct.kategoriya?.id);
       if (selectedBirlikId) formData.append('birlik', selectedBirlikId.toString());
       if (selectedKategoriyaId) formData.append('kategoriya', selectedKategoriyaId.toString());
-      if (newProduct.rasm) formData.append('rasm', newProduct.rasm);
+      if (newProduct.rasm) formData.append('rasm', newProduct.rasm); // Yangi rasm tanlansa qo‘shiladi
 
       console.log('Yangilash uchun formData:', [...formData]);
       const response = await axios.put(`${BASE_URL}mahsulotlar/${editProduct.id}/`, formData, {
@@ -226,6 +226,7 @@ const ProductsPage: React.FC = () => {
       setProducts(products.map(p => (p.id === editProduct.id ? response.data : p)).sort((a, b) => a.name.localeCompare(b.name)));
       setEditProduct(null);
       setPreviewImage(null);
+      setNewProduct({ name: '', sku: '', narx: '', birlik: '', kategoriya: '', rasm: null }); // Reset qilish
       setError(null);
     } catch (err: any) {
       console.error('Error updating product:', err.response?.data || err.message);
@@ -409,6 +410,7 @@ const ProductsPage: React.FC = () => {
               </div>
             </div>
 
+            {error && <div className="text-red-500 text-sm">{error}</div>}
             <button
               onClick={handleAddProduct}
               className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
@@ -460,7 +462,7 @@ const ProductsPage: React.FC = () => {
                 <p>SKU: {product.sku}</p>
                 <p>Kategoriya: {getKategoriyaName(product.kategoriya)}</p>
                 <p>Birlik: {getBirlikName(product.birlik)}</p>
-                <p>Narx: {product.narx} UZS</p>
+                <p>Narx: {parseFloat(product.narx).toLocaleString()} UZS</p>
                 {(user?.role === 'admin' || user?.role === 'omborchi') && (
                   <div className="mt-2 space-x-2">
                     <button
@@ -540,12 +542,8 @@ const ProductsPage: React.FC = () => {
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Birlik</label>
                   <select
-                    value={editProduct.birlik ? (typeof editProduct.birlik === 'number' ? editProduct.birlik : editProduct.birlik.id) : ''}
-                    onChange={(e) => {
-                      const selectedUnit = units.find(u => u.id === parseInt(e.target.value)) || null;
-                      setEditProduct({ ...editProduct, birlik: selectedUnit });
-                      setNewProduct({ ...newProduct, birlik: e.target.value });
-                    }}
+                    value={editProduct.birlik ? (typeof editProduct.birlik === 'number' ? editProduct.birlik : editProduct.birlik?.id || '') : ''}
+                    onChange={(e) => setEditProduct({ ...editProduct, birlik: parseInt(e.target.value) || null })}
                     className="w-full p-2 border rounded"
                   >
                     <option value="">Tanlang</option>
@@ -557,12 +555,8 @@ const ProductsPage: React.FC = () => {
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">Kategoriya</label>
                   <select
-                    value={editProduct.kategoriya ? (typeof editProduct.kategoriya === 'number' ? editProduct.kategoriya : editProduct.kategoriya.id) : ''}
-                    onChange={(e) => {
-                      const selectedCategory = categories.find(c => c.id === parseInt(e.target.value)) || null;
-                      setEditProduct({ ...editProduct, kategoriya: selectedCategory });
-                      setNewProduct({ ...newProduct, kategoriya: e.target.value });
-                    }}
+                    value={editProduct.kategoriya ? (typeof editProduct.kategoriya === 'number' ? editProduct.kategoriya : editProduct.kategoriya?.id || '') : ''}
+                    onChange={(e) => setEditProduct({ ...editProduct, kategoriya: parseInt(e.target.value) || null })}
                     className="w-full p-2 border rounded"
                   >
                     <option value="">Tanlang</option>
@@ -603,6 +597,7 @@ const ProductsPage: React.FC = () => {
                   )}
                 </div>
               </div>
+              {error && <div className="text-red-500 text-sm">{error}</div>}
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => {

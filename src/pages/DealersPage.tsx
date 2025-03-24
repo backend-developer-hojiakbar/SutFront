@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Search, Phone, MapPin, Eye } from 'lucide-react';
+import { Users, Plus, Search, Phone, MapPin, Eye, Activity } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 
@@ -17,7 +17,7 @@ interface Payment {
   id: number;
   dealerId: number;
   amount: string;
-  date: string;
+  date: string; // ISO formatdagi sana
   typeSotuv: 'naqd' | 'karta' | 'shot';
 }
 
@@ -27,6 +27,7 @@ interface Sale {
   sotib_oluvchi: number;
   total_sum: string;
   ombor: number;
+  time: string; // Yangi qo‘shilgan `time` maydoni
   items: { mahsulot: number; soni: number; narx: string }[];
 }
 
@@ -34,6 +35,13 @@ interface Product {
   id: number;
   name: string;
   rasm: string | null;
+}
+
+interface ActivityLog {
+  id: number;
+  type: 'sale' | 'payment';
+  description: string;
+  timestamp: string; // ISO formatdagi vaqt
 }
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
@@ -44,12 +52,14 @@ export default function DealersPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSalesModalOpen, setIsSalesModalOpen] = useState(false);
   const [isProductsModalOpen, setIsProductsModalOpen] = useState(false);
+  const [isActivitiesModalOpen, setIsActivitiesModalOpen] = useState(false);
   const [selectedDealerId, setSelectedDealerId] = useState<number | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [showSales, setShowSales] = useState(true); // Sotuvlar yoki to‘lovlarni ko‘rsatish uchun
+  const [showSales, setShowSales] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentType, setPaymentType] = useState<'naqd' | 'karta' | 'shot'>('naqd');
   const [currentDealerId, setCurrentDealerId] = useState<number | null>(null);
@@ -60,6 +70,7 @@ export default function DealersPage() {
     password: '',
     address: '',
     phone_number: '',
+    balance: '',
   });
   const [editingDealerId, setEditingDealerId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,7 +82,6 @@ export default function DealersPage() {
     headers: { Authorization: `JWT ${token}` },
   };
 
-  // Ma'lumotlarni yuklash
   useEffect(() => {
     const fetchData = async () => {
       if (!token || !user) {
@@ -82,13 +92,11 @@ export default function DealersPage() {
 
       try {
         const dealersRes = await axios.get(`${BASE_URL}users/?user_type=dealer`, apiConfig);
-        console.log("Users Response:", JSON.stringify(dealersRes.data, null, 2));
         const usersData = Array.isArray(dealersRes.data.results) ? dealersRes.data.results : dealersRes.data;
         const filteredDealers = usersData.filter((user: any) => user.user_type === 'dealer');
         setDealers(filteredDealers);
 
         const paymentsRes = await axios.get(`${BASE_URL}payments/`, apiConfig);
-        console.log("Payments Response:", JSON.stringify(paymentsRes.data, null, 2));
         const paymentsData = Array.isArray(paymentsRes.data.results) ? paymentsRes.data.results : paymentsRes.data;
         setPayments(
           paymentsData
@@ -103,14 +111,26 @@ export default function DealersPage() {
         );
 
         const salesRes = await axios.get(`${BASE_URL}sotuvlar/`, apiConfig);
-        console.log("Sales Response:", JSON.stringify(salesRes.data, null, 2));
         const salesData = Array.isArray(salesRes.data) ? salesRes.data : salesRes.data.results || [];
-        setSales(salesData);
+        setSales(salesData.sort((a: Sale, b: Sale) => new Date(b.time).getTime() - new Date(a.time).getTime()));
 
         const productsRes = await axios.get(`${BASE_URL}mahsulotlar/`, apiConfig);
-        console.log("Products Response:", JSON.stringify(productsRes.data, null, 2));
         const productsData = Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data;
         setProducts(productsData);
+
+        const saleActivities = salesData.map((sale: Sale) => ({
+          id: sale.id,
+          type: 'sale' as const,
+          description: `Sotuv: ${parseFloat(sale.total_sum).toLocaleString()} UZS`,
+          timestamp: sale.time,
+        }));
+        const paymentActivities = paymentsData.map((payment: any) => ({
+          id: payment.id,
+          type: 'payment' as const,
+          description: `To‘lov: ${parseFloat(payment.summa).toLocaleString()} UZS (${payment.typeSotuv})`,
+          timestamp: payment.sana,
+        }));
+        setActivities([...saleActivities, ...paymentActivities].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       } catch (err: any) {
         console.error('Error fetching data:', err.response?.data || err.message);
         setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
@@ -122,6 +142,21 @@ export default function DealersPage() {
     fetchData();
   }, [token, user]);
 
+  const formatToTashkentTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
+    const localOffsetMinutes = date.getTimezoneOffset();
+    const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
+    return tashkentTime.toLocaleString('uz-UZ', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
   const handleAddDealer = () => {
     if (user?.role !== 'admin' && user?.role !== 'omborchi') {
       setError('Sizda yangi diler qo‘shish huquqi yo‘q.');
@@ -129,7 +164,7 @@ export default function DealersPage() {
     }
     setIsModalOpen(true);
     setEditingDealerId(null);
-    setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '' });
+    setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
     setError(null);
   };
 
@@ -146,6 +181,7 @@ export default function DealersPage() {
         password: '',
         address: dealerToEdit.address || '',
         phone_number: dealerToEdit.phone_number || '',
+        balance: dealerToEdit.balance || '',
       });
       setEditingDealerId(id);
       setIsModalOpen(true);
@@ -155,8 +191,13 @@ export default function DealersPage() {
 
   const handleViewSales = (dealerId: number) => {
     setSelectedDealerId(dealerId);
-    setShowSales(true); // Sotuvlarni ko‘rsatish uchun
+    setShowSales(true);
     setIsSalesModalOpen(true);
+  };
+
+  const handleViewActivities = (dealerId: number) => {
+    setSelectedDealerId(dealerId);
+    setIsActivitiesModalOpen(true);
   };
 
   const handleViewProducts = (sale: Sale) => {
@@ -188,6 +229,7 @@ export default function DealersPage() {
         password: newDealer.password || undefined,
         address: newDealer.address || null,
         phone_number: newDealer.phone_number || null,
+        balance: newDealer.balance ? parseFloat(newDealer.balance).toFixed(2) : '0.00',
         user_type: 'dealer',
       };
 
@@ -203,7 +245,7 @@ export default function DealersPage() {
 
       setIsModalOpen(false);
       setEditingDealerId(null);
-      setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '' });
+      setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
       setError(null);
     } catch (err: any) {
       console.error('Error submitting dealer:', err.response?.data || err.message);
@@ -240,28 +282,36 @@ export default function DealersPage() {
 
     setIsSubmitting(true);
     try {
+      // Joriy sanani YYYY-MM-DD formatida olish
+      const currentDate = new Date().toISOString().split('T')[0]; // Faqat sana qismini olamiz
       const paymentData = {
         user: currentDealerId,
-        sana: new Date().toISOString().split('T')[0],
+        sana: currentDate, // ISO format o‘rniga YYYY-MM-DD
         summa: parseFloat(paymentAmount).toFixed(2),
         typeSotuv: paymentType,
       };
 
-      console.log("Sending payment request:", JSON.stringify(paymentData, null, 2));
       const response = await axios.post(`${BASE_URL}payments/`, paymentData, apiConfig);
-      console.log("Payment response:", JSON.stringify(response.data, null, 2));
-      setPayments([...payments, {
+      const newPayment = {
         id: response.data.id,
         dealerId: currentDealerId,
         amount: response.data.summa,
         date: response.data.sana,
         typeSotuv: response.data.typeSotuv,
-      }]);
+      };
+      setPayments([...payments, newPayment]);
+      setActivities(prev => [
+        {
+          id: response.data.id,
+          type: 'payment',
+          description: `To‘lov: ${parseFloat(response.data.summa).toLocaleString()} UZS (${response.data.typeSotuv})`,
+          timestamp: response.data.sana,
+        },
+        ...prev,
+      ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+
       const updatedDealerRes = await axios.get(`${BASE_URL}users/${currentDealerId}/`, apiConfig);
-      console.log("Updated dealer after payment:", JSON.stringify(updatedDealerRes.data, null, 2));
-      setDealers(dealers.map(d => 
-        d.id === currentDealerId ? updatedDealerRes.data : d
-      ));
+      setDealers(dealers.map(d => (d.id === currentDealerId ? updatedDealerRes.data : d)));
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentType('naqd');
@@ -381,7 +431,7 @@ export default function DealersPage() {
               </div>
               <div className="mt-2">
                 <h4 className="text-sm font-medium text-gray-700">Balans</h4>
-                <p className="text-sm text-gray-500">UZS: {dealer.balance}</p>
+                <p className="text-sm text-gray-500">UZS: {parseFloat(dealer.balance).toLocaleString()}</p>
               </div>
               {(user?.role === 'admin' || user?.role === 'omborchi') && (
                 <button
@@ -394,7 +444,7 @@ export default function DealersPage() {
                   To‘lov qilish
                 </button>
               )}
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex items-center gap-4">
                 <span className={`text-sm ${dealer.is_active ? 'text-green-600' : 'text-red-600'}`}>
                   {dealer.is_active ? 'Aktiv' : 'Faol emas'}
                 </span>
@@ -404,6 +454,13 @@ export default function DealersPage() {
                 >
                   <Eye className="h-4 w-4 mr-1" />
                   Sotuvlar tarixi
+                </button>
+                <button
+                  onClick={() => handleViewActivities(dealer.id)}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+                >
+                  <Activity className="h-4 w-4 mr-1" />
+                  Faoliyatlar
                 </button>
               </div>
             </div>
@@ -475,6 +532,18 @@ export default function DealersPage() {
                   onChange={handleInputChange}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Telefon kiriting"
+                  disabled={isSubmitting}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Balans</label>
+                <input
+                  type="number"
+                  name="balance"
+                  value={newDealer.balance}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Balans kiriting (UZS)"
                   disabled={isSubmitting}
                 />
               </div>
@@ -575,7 +644,7 @@ export default function DealersPage() {
                   <thead>
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sana
+                        Sana va vaqt
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Jami summa
@@ -591,7 +660,7 @@ export default function DealersPage() {
                       .map((sale) => (
                         <tr key={sale.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {sale.sana}
+                            {formatToTashkentTime(sale.time)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {parseFloat(sale.total_sum).toLocaleString()} UZS
@@ -614,7 +683,7 @@ export default function DealersPage() {
                   <thead>
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sana
+                        Sana va vaqt
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Summa
@@ -630,7 +699,7 @@ export default function DealersPage() {
                       .map((payment) => (
                         <tr key={payment.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {payment.date}
+                            {formatToTashkentTime(payment.date)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {parseFloat(payment.amount).toLocaleString()} UZS
@@ -652,6 +721,59 @@ export default function DealersPage() {
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setIsSalesModalOpen(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Yopish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isActivitiesModalOpen && selectedDealerId && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl">
+            <h2 className="text-lg font-medium mb-4">Diler faoliyatlari</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sana va vaqt
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Faoliyat turi
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tavsif
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {activities
+                    .filter(activity => 
+                      (activity.type === 'sale' && sales.some(s => s.id === activity.id && s.sotib_oluvchi === selectedDealerId)) ||
+                      (activity.type === 'payment' && payments.some(p => p.id === activity.id && p.dealerId === selectedDealerId))
+                    )
+                    .map((activity) => (
+                      <tr key={activity.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatToTashkentTime(activity.timestamp)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {activity.type === 'sale' ? 'Sotuv' : 'To‘lov'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {activity.description}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setIsActivitiesModalOpen(false)}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
               >
                 Yopish

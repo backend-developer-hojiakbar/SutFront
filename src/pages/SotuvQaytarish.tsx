@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import html2pdf from 'html2pdf.js';
-import Barcode from 'react-barcode'; // Barcode uchun kutubxona (npm install react-barcode)
+import Barcode from 'react-barcode';
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
@@ -18,7 +18,8 @@ interface Product {
 interface CartItem {
   productId: number;
   quantity: number;
-  price: number; // Bu narx mahsulotning o‘zgartirilgan yoki asl narxi bo‘ladi
+  price: number;
+  isDefective: boolean;
 }
 
 interface Ombor {
@@ -30,17 +31,18 @@ interface Ombor {
 interface User {
   id: number;
   username: string;
-  user_type: string;
+  user_type?: string;
   created_by?: number;
 }
 
 interface Return {
   id: number;
   sana: string;
+  time: string;
   qaytaruvchi: number;
   total_sum: string;
   ombor: number;
-  items: { mahsulot: number; soni: number; narx: string }[];
+  items: { mahsulot: number; soni: number; narx: string; is_defective: boolean }[];
 }
 
 const SotuvQaytarishPage: React.FC = () => {
@@ -50,6 +52,7 @@ const SotuvQaytarishPage: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [isDefective, setIsDefective] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [userOmbor, setUserOmbor] = useState<Ombor | null>(null);
@@ -68,15 +71,23 @@ const SotuvQaytarishPage: React.FC = () => {
   };
 
   const fetchData = async () => {
-    if (!token || !user) {
-      setError('Autentifikatsiya tokeni yoki foydalanuvchi topilmadi.');
+    if (!token) {
+      setError('Autentifikatsiya tokeni topilmadi.');
       setLoading(false);
       return;
     }
 
-    if (user?.user_type === 'dealer') {
-      setError('Sizda bu sahifaga kirish huquqi yo‘q.');
-      navigate('/dashboard');
+    if (!user || typeof user !== 'object') {
+      setError('Foydalanuvchi ma’lumotlari topilmadi yoki noto‘g‘ri.');
+      console.error('User obyekti noto‘g‘ri:', user);
+      setLoading(false);
+      return;
+    }
+
+    console.log('Foydalanuvchi ma’lumotlari:', user.role);
+
+    if (!user.role) {
+      setError('Foydalanuvchi turi (user_type) topilmadi.');
       setLoading(false);
       return;
     }
@@ -89,10 +100,15 @@ const SotuvQaytarishPage: React.FC = () => {
       }
       setUserOmbor(omborData[0] || null);
 
-      const usersRes = await axios.get(`${BASE_URL}users/`, apiConfig);
+      const usersRes = await axios.get(`${BASE_URL}users/?user_type=dealer`, apiConfig);
       let usersData = usersRes.data.results || usersRes.data;
-      if (user.user_type === 'dealer') {
-        usersData = usersData.filter((u: User) => u.user_type === 'shop' && u.created_by === user.id);
+      if (user.user_type === 'admin') {
+        usersData = usersData.filter((u: User) => u.user_type === 'dealer');
+      } else if (user.user_type === 'dealer') {
+        setError('Sizda bu sahifaga kirish huquqi yo‘q.');
+        navigate('/dashboard');
+        setLoading(false);
+        return;
       } else if (user.user_type === 'shop') {
         usersData = [user];
       }
@@ -124,8 +140,28 @@ const SotuvQaytarishPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    if (user && token) {
+      fetchData();
+    } else {
+      setError('Foydalanuvchi yoki token yuklanmadi.');
+      setLoading(false);
+    }
   }, [token, user, navigate]);
+
+  const formatToTashkentTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
+    const localOffsetMinutes = date.getTimezoneOffset();
+    const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
+    return tashkentTime.toLocaleString('uz-UZ', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
 
   const openPriceModal = () => {
     const product = products.find((p) => p.id === selectedProduct);
@@ -157,11 +193,6 @@ const SotuvQaytarishPage: React.FC = () => {
       return;
     }
 
-    if (product.stock !== undefined && product.stock < quantity) {
-      setError(`Omborda ${product.name} yetarli emas (Mavjud: ${product.stock})`);
-      return;
-    }
-
     const priceToUse = customPrice || (typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
 
     const existingItem = cart.find((item) => item.productId === selectedProduct);
@@ -169,16 +200,17 @@ const SotuvQaytarishPage: React.FC = () => {
       setCart(
         cart.map((item) =>
           item.productId === selectedProduct
-            ? { ...item, quantity: item.quantity + quantity, price: priceToUse }
+            ? { ...item, quantity: item.quantity + quantity, price: priceToUse, isDefective }
             : item
         )
       );
     } else {
-      setCart([...cart, { productId: selectedProduct, quantity, price: priceToUse }]);
+      setCart([...cart, { productId: selectedProduct, quantity, price: priceToUse, isDefective }]);
     }
     setTotalSum(cart.reduce((sum, item) => sum + item.quantity * item.price, 0) + quantity * priceToUse);
     setSelectedProduct(null);
     setQuantity(1);
+    setIsDefective(false);
     setSearchQuery('');
     setCustomPrice(0);
     setError(null);
@@ -216,14 +248,22 @@ const SotuvQaytarishPage: React.FC = () => {
     }
 
     try {
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatida sana
+      const allDefective = cart.every((item) => item.isDefective); // Barcha mahsulotlar noso'g'lommi?
+      const condition = allDefective ? 'unhealthy' : 'healthy'; // Holatni aniqlash
+
       const returnData = {
         qaytaruvchi: selectedReturner,
         ombor: userOmbor.id,
+        sana: currentDate,
         total_sum: parseFloat(totalSum.toFixed(2)),
+        time: new Date().toISOString(),
+        condition: condition, // Backendda kutilayotgan condition maydoni
         items: cart.map((item) => ({
           mahsulot: item.productId,
           soni: item.quantity,
           narx: parseFloat(item.price.toFixed(2)),
+          // `is_defective` hozircha serializerda yo'q, agar kerak bo'lsa qo'shiladi
         })),
       };
 
@@ -233,7 +273,8 @@ const SotuvQaytarishPage: React.FC = () => {
 
       const returnRecord: Return = {
         id: returnRes.data.id,
-        sana: new Date().toISOString().split('T')[0],
+        sana: returnRes.data.sana || currentDate,
+        time: returnRes.data.time || new Date().toISOString(),
         qaytaruvchi: selectedReturner,
         total_sum: totalSum.toFixed(2),
         ombor: userOmbor.id,
@@ -241,6 +282,7 @@ const SotuvQaytarishPage: React.FC = () => {
           mahsulot: item.mahsulot,
           soni: item.soni,
           narx: item.narx.toString(),
+          is_defective: cart.find((cartItem) => cartItem.productId === item.mahsulot)?.isDefective || false, // Mahalliy saqlash uchun
         })),
       };
       setReturnReceipt(returnRecord);
@@ -427,12 +469,23 @@ const SotuvQaytarishPage: React.FC = () => {
                 />
               </div>
               <button
-                className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
+                className="mt-6 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
                 onClick={openPriceModal}
                 disabled={!selectedProduct}
               >
                 Narxni O‘zgartirish
               </button>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Holati</label>
+              <select
+                className="w-full p-2 border border-gray-300 rounded-md"
+                value={isDefective ? 'true' : 'false'}
+                onChange={(e) => setIsDefective(e.target.value === 'true')}
+              >
+                <option value="false">So‘g‘lom</option>
+                <option value="true">Noso‘g‘lom</option>
+              </select>
             </div>
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -461,7 +514,7 @@ const SotuvQaytarishPage: React.FC = () => {
                           {products.find((p) => p.id === item.productId)?.name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {item.quantity} x {item.price.toLocaleString()} UZS
+                          {item.quantity} x {item.price.toLocaleString()} UZS ({item.isDefective ? 'Noso‘g‘lom' : 'So‘g‘lom'})
                         </div>
                       </div>
                       <button
@@ -494,7 +547,6 @@ const SotuvQaytarishPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Narx o‘zgartirish modali */}
       {isPriceModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
@@ -534,7 +586,6 @@ const SotuvQaytarishPage: React.FC = () => {
         </div>
       )}
 
-      {/* Chek modal */}
       {isReceiptModalOpen && returnReceipt && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
@@ -547,7 +598,7 @@ const SotuvQaytarishPage: React.FC = () => {
                   <h2>Farg'ona viloyati, Bag'dod tumani "LEMOON" marketi</h2>
                   <div className="details">
                     <p>Kassa raqami: {returnReceipt.id}</p>
-                    <p>Sana: {new Date(returnReceipt.sana).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                    <p>Sana va vaqt: {formatToTashkentTime(returnReceipt.time)}</p>
                   </div>
                   <p>Kassa: {user?.username || 'Noma\'lum'}</p>
                 </div>
@@ -558,6 +609,7 @@ const SotuvQaytarishPage: React.FC = () => {
                         <th>Nomi</th>
                         <th>Soni</th>
                         <th>Narx (UZS)</th>
+                        <th>Holati</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -566,6 +618,7 @@ const SotuvQaytarishPage: React.FC = () => {
                           <td>{getProductName(item.mahsulot)}</td>
                           <td>{item.soni}</td>
                           <td>{parseFloat(item.narx).toLocaleString()}</td>
+                          <td>{item.is_defective ? 'Noso‘g‘lom' : 'So‘g‘lom'}</td>
                         </tr>
                       ))}
                     </tbody>

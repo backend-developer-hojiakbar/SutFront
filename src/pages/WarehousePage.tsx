@@ -33,7 +33,7 @@ interface Kategoriya {
 interface Purchase {
   id: number;
   ombor: number;
-  sana: string;
+  sana: string; // Sana faqat YYYY-MM-DD formatida saqlanadi
   yetkazib_beruvchi: number;
   total_sum: number;
   items: PurchaseItem[];
@@ -41,7 +41,7 @@ interface Purchase {
 
 interface PurchaseItem {
   id?: number;
-  mahsulot: number; // ID sifatida kelishi mumkin
+  mahsulot: number;
   soni: number;
   narx: string;
   yaroqlilik_muddati: string | null;
@@ -98,7 +98,7 @@ export default function WarehousePage() {
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [productSearchQueries, setProductSearchQueries] = useState<string[]>([]);
-  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null); // Yangi state qo'shildi
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
 
   const fetchAllProducts = async (url: string, config: any, accumulated: Product[] = []): Promise<Product[]> => {
     try {
@@ -148,7 +148,6 @@ export default function WarehousePage() {
         setWarehouses(warehousesData);
 
         setProducts(productsRes);
-
         setBirliklar(Array.isArray(birliklarRes.data) ? birliklarRes.data : birliklarRes.data.results || []);
         setKategoriyalar(Array.isArray(kategoriyalarRes.data) ? kategoriyalarRes.data : kategoriyalarRes.data.results || []);
         setManagers(Array.isArray(usersRes.data) ? usersRes.data : usersRes.data.results || []);
@@ -176,6 +175,21 @@ export default function WarehousePage() {
 
     fetchData();
   }, [token, user]);
+
+  const formatToTashkentTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
+    const localOffsetMinutes = date.getTimezoneOffset();
+    const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
+    return tashkentTime.toLocaleString('uz-UZ', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
 
   const getManagerName = (id: number | null) => {
     if (!id) return 'Belgilanmagan';
@@ -251,7 +265,7 @@ export default function WarehousePage() {
 
       const purchaseData = {
         ombor: warehouseId,
-        sana: date,
+        sana: date, // Faqat YYYY-MM-DD formatida
         yetkazib_beruvchi: managerId,
         items: productEntries.map(entry => {
           const product = products.find(p => p.name === entry.product);
@@ -292,7 +306,7 @@ export default function WarehousePage() {
     setEditingPurchase(purchase);
     setSelectedWarehouse(getWarehouseName(purchase.ombor));
     setSelectedManager(getManagerName(purchase.yetkazib_beruvchi));
-    setDate(purchase.sana);
+    setDate(purchase.sana.split('T')[0]); // Faqat sana qismini olish
     setProductEntries(purchase.items.map(item => ({
       product: getProductName(item.mahsulot),
       quantity: item.soni.toString(),
@@ -322,7 +336,7 @@ export default function WarehousePage() {
 
       const purchaseData = {
         ombor: warehouseId,
-        sana: date,
+        sana: date, // Faqat YYYY-MM-DD formatida
         yetkazib_beruvchi: managerId,
         items: productEntries.map(entry => {
           const product = products.find(p => p.name === entry.product);
@@ -393,11 +407,12 @@ export default function WarehousePage() {
   const handleAddWarehouse = async () => {
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
+      const responsiblePersonId = managers.find(m => m.username === newWarehouse.responsible_person)?.id || null;
       const warehouseData = {
         name: newWarehouse.name,
         address: newWarehouse.address,
         current_stock: parseInt(newWarehouse.current_stock) || 0,
-        responsible_person: managers.find(m => m.username === newWarehouse.responsible_person)?.id || null,
+        responsible_person: responsiblePersonId,
       };
 
       const response = await axios.post('https://lemoonapi.cdpos.uz:444/omborlar/', warehouseData, config);
@@ -422,11 +437,12 @@ export default function WarehousePage() {
 
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
+      const responsiblePersonId = managers.find(m => m.username === editingWarehouse.responsible_person)?.id || editingWarehouse.responsible_person;
       const updatedData = {
         name: editingWarehouse.name,
         address: editingWarehouse.address,
         current_stock: editingWarehouse.current_stock,
-        responsible_person: editingWarehouse.responsible_person || null,
+        responsible_person: responsiblePersonId,
       };
 
       const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
@@ -508,7 +524,7 @@ export default function WarehousePage() {
   };
 
   const handleViewPurchaseItems = (purchase: Purchase) => {
-    setSelectedPurchase(purchase); // Tranzaksiyaning barcha mahsulotlarini saqlash
+    setSelectedPurchase(purchase);
     setIsViewProductsModalOpen(true);
   };
 
@@ -763,7 +779,7 @@ export default function WarehousePage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ombor</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yetkazib beruvchi</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sana</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sana va vaqt</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulotlar</th>
                   {(user?.role === 'admin' || user?.role === 'omborchi') && (
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amallar</th>
@@ -776,7 +792,7 @@ export default function WarehousePage() {
                     <tr key={purchase.id}>
                       <td className="px-6 py-4 whitespace-nowrap">{getWarehouseName(purchase.ombor)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">{getManagerName(purchase.yetkazib_beruvchi)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{purchase.sana}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{formatToTashkentTime(purchase.sana)}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => handleViewPurchaseItems(purchase)}
@@ -850,9 +866,11 @@ export default function WarehousePage() {
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 >
                   <option value="">Boshqaruvchi tanlang</option>
-                  {managers.map((manager) => (
-                    <option key={manager.id} value={manager.username}>{manager.username}</option>
-                  ))}
+                  {managers
+                    .filter((manager) => manager.user_type === 'dealer')
+                    .map((manager) => (
+                      <option key={manager.id} value={manager.username}>{manager.username}</option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -914,9 +932,11 @@ export default function WarehousePage() {
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 >
                   <option value="">Boshqaruvchi tanlang</option>
-                  {managers.map((manager) => (
-                    <option key={manager.id} value={manager.username}>{manager.username}</option>
-                  ))}
+                  {managers
+                    .filter((manager) => manager.user_type === 'dealer')
+                    .map((manager) => (
+                      <option key={manager.id} value={manager.username}>{manager.username}</option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -1209,7 +1229,7 @@ export default function WarehousePage() {
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-[80%] max-w-3xl">
             <h2 className="text-lg font-medium mb-4">
-              {selectedPurchase ? `Tranzaksiya mahsulotlari: ${getWarehouseName(selectedPurchase.ombor)} - ${selectedPurchase.sana}` : 'Ombordagi Mahsulotlar'}
+              {selectedPurchase ? `Tranzaksiya mahsulotlari: ${getWarehouseName(selectedPurchase.ombor)} - ${formatToTashkentTime(selectedPurchase.sana)}` : 'Ombordagi Mahsulotlar'}
             </h2>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">

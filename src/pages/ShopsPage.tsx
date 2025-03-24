@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Store, Plus, Search, Phone, MapPin, Eye } from 'lucide-react';
+import { Store, Plus, Search, Phone, MapPin, Eye, Filter } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 
@@ -15,11 +15,16 @@ interface Shop {
   created_by?: number;
 }
 
+interface Dealer {
+  id: number;
+  username: string;
+}
+
 interface Payment {
   id: number;
   shopId: number;
   amount: string;
-  date: string;
+  date: string; // YYYY-MM-DD formatdagi sana
   typeSotuv: 'naqd' | 'karta' | 'shot';
 }
 
@@ -29,6 +34,7 @@ interface Sale {
   sotib_oluvchi: number;
   total_sum: string;
   ombor: number;
+  time: string;
   items: { mahsulot: number; soni: number; narx: string }[];
 }
 
@@ -43,14 +49,17 @@ const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 export default function ShopsPage() {
   const { token, user } = useAuthStore();
   const [shops, setShops] = useState<Shop[]>([]);
+  const [dealers, setDealers] = useState<Dealer[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSalesModalOpen, setIsSalesModalOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [selectedShopId, setSelectedShopId] = useState<number | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [selectedDealerId, setSelectedDealerId] = useState<number | null>(null);
   const [showSales, setShowSales] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentType, setPaymentType] = useState<'naqd' | 'karta' | 'shot'>('naqd');
@@ -62,6 +71,7 @@ export default function ShopsPage() {
     password: '',
     address: '',
     phone_number: '',
+    balance: '',
   });
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -82,44 +92,36 @@ export default function ShopsPage() {
       }
 
       try {
-        // Do‘konlarni olish
         const shopsRes = await axios.get(`${BASE_URL}users/?user_type=shop`, apiConfig);
-        console.log("Shops Response:", JSON.stringify(shopsRes.data, null, 2));
         let shopsData = Array.isArray(shopsRes.data.results) ? shopsRes.data.results : shopsRes.data;
-
-        // `user_type='shop'` bo'lganlarni filtrlaymiz
         shopsData = shopsData.filter((shop: any) => shop.user_type === 'shop');
 
-        // Filtrlash logikasi
+        const dealersRes = await axios.get(`${BASE_URL}users/?user_type=dealer`, apiConfig);
+        const dealersData = Array.isArray(dealersRes.data.results) ? dealersRes.data.results : dealersRes.data;
+        setDealers(dealersData.filter((d: any) => d.user_type === 'dealer'));
+
         if (user.role === 'admin' || user.role === 'omborchi') {
-          // Admin yoki omborchi bo'lsa hamma shop'larni qoldiramiz
           shopsData = shopsData;
         } else if (user.role === 'dealer') {
-          // Dealer bo'lsa faqat o'zi yaratgan shop'larni filtrlaymiz
           shopsData = shopsData.filter((shop: any) => shop.created_by === user.id);
         }
 
-        // Sotuvlarni olish
         const salesRes = await axios.get(`${BASE_URL}sotuvlar/`, apiConfig);
-        console.log("Sales Response:", JSON.stringify(salesRes.data, null, 2));
         const salesData = Array.isArray(salesRes.data) ? salesRes.data : salesRes.data.results || [];
-        setSales(salesData);
+        setSales(salesData.sort((a: Sale, b: Sale) => new Date(b.time).getTime() - new Date(a.time).getTime()));
 
-        // Har bir shop uchun oxirgi sotuv sanasini yangilash
         const updatedShops = shopsData.map((shop: Shop) => {
           const lastSale = salesData
             .filter((sale: Sale) => sale.sotib_oluvchi === shop.id)
-            .sort((a: Sale, b: Sale) => new Date(b.sana).getTime() - new Date(a.sana).getTime())[0];
+            .sort((a: Sale, b: Sale) => new Date(b.time).getTime() - new Date(a.time).getTime())[0];
           return {
             ...shop,
-            last_sotuv_vaqti: lastSale ? lastSale.sana : shop.last_sotuv_vaqti || null,
+            last_sotuv_vaqti: lastSale ? lastSale.time : shop.last_sotuv_vaqti || null,
           };
         });
         setShops(updatedShops);
 
-        // To‘lovlarni olish
         const paymentsRes = await axios.get(`${BASE_URL}payments/`, apiConfig);
-        console.log("Payments Response:", JSON.stringify(paymentsRes.data, null, 2));
         const paymentsData = Array.isArray(paymentsRes.data.results) ? paymentsRes.data.results : paymentsRes.data;
         setPayments(
           paymentsData
@@ -133,12 +135,9 @@ export default function ShopsPage() {
             }))
         );
 
-        // Mahsulotlarni olish
         const productsRes = await axios.get(`${BASE_URL}mahsulotlar/`, apiConfig);
-        console.log("Products Response:", JSON.stringify(productsRes.data, null, 2));
         const productsData = Array.isArray(productsRes.data.results) ? productsRes.data.results : productsRes.data;
         setProducts(productsData);
-
       } catch (err: any) {
         console.error('Error fetching data:', err.response?.data || err.message);
         setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
@@ -150,15 +149,30 @@ export default function ShopsPage() {
     fetchData();
   }, [token, user]);
 
+  const formatToTashkentTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
+    const localOffsetMinutes = date.getTimezoneOffset();
+    const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
+    return tashkentTime.toLocaleString('uz-UZ', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
   const handleOpenModal = () => {
     setIsModalOpen(true);
     setIsEditMode(false);
-    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '' });
+    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '' });
+    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
     setIsEditMode(false);
     setCurrentShopId(null);
   };
@@ -169,8 +183,8 @@ export default function ShopsPage() {
   };
 
   const handleAddShop = async () => {
-    if (!newShop.username || !newShop.password) {
-      setError('Do‘kon nomi va parol kiritilishi shart.');
+    if (!newShop.username || (!isEditMode && !newShop.password)) {
+      setError('Do‘kon nomi va yangi do‘kon uchun parol kiritilishi shart.');
       return;
     }
 
@@ -179,9 +193,10 @@ export default function ShopsPage() {
       const shopData = {
         username: newShop.username,
         email: newShop.email,
-        password: newShop.password,
+        password: newShop.password || undefined,
         address: newShop.address || null,
         phone_number: newShop.phone_number || null,
+        balance: newShop.balance ? parseFloat(newShop.balance).toFixed(2) : '0.00',
         user_type: 'shop',
         created_by: user?.id,
       };
@@ -216,6 +231,7 @@ export default function ShopsPage() {
       password: '',
       address: shop.address || '',
       phone_number: shop.phone_number || '',
+      balance: shop.balance || '',
     });
     setIsEditMode(true);
     setCurrentShopId(shop.id);
@@ -243,28 +259,25 @@ export default function ShopsPage() {
 
     setIsSubmitting(true);
     try {
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatida sana
       const paymentData = {
         user: currentShopId,
-        sana: new Date().toISOString().split('T')[0],
+        sana: currentDate,
         summa: parseFloat(paymentAmount).toFixed(2),
         typeSotuv: paymentType,
       };
 
-      console.log("Sending payment request:", JSON.stringify(paymentData, null, 2));
       const response = await axios.post(`${BASE_URL}payments/`, paymentData, apiConfig);
-      console.log("Payment response:", JSON.stringify(response.data, null, 2));
-      setPayments([...payments, {
+      const newPayment = {
         id: response.data.id,
         shopId: currentShopId,
         amount: response.data.summa,
         date: response.data.sana,
         typeSotuv: response.data.typeSotuv,
-      }]);
+      };
+      setPayments([...payments, newPayment]);
       const updatedShopRes = await axios.get(`${BASE_URL}users/${currentShopId}/`, apiConfig);
-      console.log("Updated shop after payment:", JSON.stringify(updatedShopRes.data, null, 2));
-      setShops(shops.map(s => 
-        s.id === currentShopId ? updatedShopRes.data : s
-      ));
+      setShops(shops.map(s => (s.id === currentShopId ? updatedShopRes.data : s)));
       setIsPaymentModalOpen(false);
       setPaymentAmount('');
       setPaymentType('naqd');
@@ -301,6 +314,10 @@ export default function ShopsPage() {
       .reduce((sum, payment) => sum + parseFloat(payment.amount), 0);
   };
 
+  const calculateTotalBalance = () => {
+    return filteredShops.reduce((sum, shop) => sum + parseFloat(shop.balance || '0'), 0);
+  };
+
   const getProductName = (productId: number) => {
     const product = products.find(p => p.id === productId);
     return product ? product.name : `Mahsulot #${productId}`;
@@ -312,10 +329,11 @@ export default function ShopsPage() {
   };
 
   const filteredShops = shops.filter(shop =>
-    shop.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (shop.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (shop.email && shop.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (shop.address && shop.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (shop.phone_number && shop.phone_number.includes(searchTerm))
+    (shop.phone_number && shop.phone_number.includes(searchTerm))) &&
+    (!selectedDealerId || shop.created_by === selectedDealerId)
   );
 
   if (loading) return <div className="p-6">Yuklanmoqda...</div>;
@@ -336,15 +354,30 @@ export default function ShopsPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        {(user?.role === 'admin' || user?.role === 'dealer') && (
-          <button
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            onClick={handleOpenModal}
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Do‘kon qo‘shish
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {(user?.role === 'admin' || user?.role === 'dealer') && (
+            <button
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              onClick={handleOpenModal}
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Do‘kon qo‘shish
+            </button>
+          )}
+          {(user?.role === 'admin' || user?.role === 'omborchi') && (
+            <button
+              className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              onClick={() => setIsFilterModalOpen(true)}
+            >
+              <Filter className="h-5 w-5 mr-2" />
+              Filter
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 text-lg font-medium text-gray-900">
+        Umumiy balans: {calculateTotalBalance().toLocaleString()} UZS
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -400,7 +433,7 @@ export default function ShopsPage() {
               </div>
               <div className="mt-2">
                 <h4 className="text-sm font-medium text-gray-700">Balans</h4>
-                <p className="text-sm text-gray-500">UZS: {shop.balance}</p>
+                <p className="text-sm text-gray-500">UZS: {parseFloat(shop.balance).toLocaleString()}</p>
               </div>
               {(user?.role === 'admin' || user?.role === 'dealer') && (
                 <button
@@ -415,7 +448,7 @@ export default function ShopsPage() {
               )}
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-sm text-gray-500">
-                  Oxirgi sotuv: {shop.last_sotuv_vaqti || 'Mavjud emas'}
+                  Oxirgi sotuv: {shop.last_sotuv_vaqti ? formatToTashkentTime(shop.last_sotuv_vaqti) : 'Mavjud emas'}
                 </span>
                 <button
                   onClick={() => handleViewSales(shop.id)}
@@ -497,6 +530,18 @@ export default function ShopsPage() {
                   disabled={isSubmitting}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Balans</label>
+                <input
+                  type="number"
+                  name="balance"
+                  value={newShop.balance}
+                  onChange={handleInputChange}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Balans kiriting (UZS)"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
             {error && <div className="mt-4 text-red-600 text-sm">{error}</div>}
             <div className="mt-6 flex justify-end space-x-4">
@@ -513,6 +558,34 @@ export default function ShopsPage() {
                 disabled={isSubmitting}
               >
                 {isEditMode ? 'Yangilash' : 'Qo‘shish'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isFilterModalOpen && (user?.role === 'admin' || user?.role === 'omborchi') && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-lg font-medium mb-4">Diler bo‘yicha filtr</h2>
+            <div className="space-y-4">
+              <select
+                value={selectedDealerId || ''}
+                onChange={(e) => setSelectedDealerId(e.target.value ? Number(e.target.value) : null)}
+                className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value="">Barcha dilerlar</option>
+                {dealers.map((dealer) => (
+                  <option key={dealer.id} value={dealer.id}>{dealer.username}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-6 flex justify-end space-x-4">
+              <button
+                onClick={() => setIsFilterModalOpen(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                Yopish
               </button>
             </div>
           </div>
@@ -597,7 +670,7 @@ export default function ShopsPage() {
                   <thead>
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sana
+                        Sana va vaqt
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Jami summa
@@ -613,7 +686,7 @@ export default function ShopsPage() {
                       .map((sale) => (
                         <tr key={sale.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {sale.sana}
+                            {formatToTashkentTime(sale.time)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {parseFloat(sale.total_sum).toLocaleString()} UZS
@@ -636,7 +709,7 @@ export default function ShopsPage() {
                   <thead>
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sana
+                        Sana va vaqt
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Summa
@@ -652,7 +725,7 @@ export default function ShopsPage() {
                       .map((payment) => (
                         <tr key={payment.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {payment.date}
+                            {formatToTashkentTime(payment.date)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {parseFloat(payment.amount).toLocaleString()} UZS
@@ -662,7 +735,7 @@ export default function ShopsPage() {
                           </td>
                         </tr>
                       ))}
-                  </tbody>
+                 уде</tbody>
                 </table>
               )}
             </div>

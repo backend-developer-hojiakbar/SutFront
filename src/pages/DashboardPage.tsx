@@ -1,27 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BarChart3,
-  Package,
-  Users,
-  Store,
-  FileText,
-  TrendingUp,
-  Undo2,
-  ShoppingCart,
-} from 'lucide-react';
+import { BarChart3, Package, Users, Store, TrendingUp, FileText } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
 
-// Interfeyslar (oldingi kod bilan bir xil)
+// Interfeyslar
 interface Sale {
   id: number;
   sana: string;
   sotib_oluvchi: number;
   total_sum: string;
   ombor: number;
+  time: string; // Yangi qo‘shilgan `time` maydoni
   items: { mahsulot: number; soni: number; narx: string }[];
 }
 
@@ -42,22 +34,12 @@ interface Warehouse {
   name: string;
 }
 
-interface Purchase {
+interface Activity {
   id: number;
-  ombor: number;
-  sana: string;
-  yetkazib_beruvchi: number;
-  items: { mahsulot: number; soni: number; narx: string }[];
-  total_sum: string;
-}
-
-interface Return {
-  id: number;
-  sana: string;
-  qaytaruvchi: number;
-  total_sum: string;
-  ombor: number;
-  items: { mahsulot: number; soni: number; narx: string }[];
+  user_id: number;
+  action: string;
+  timestamp: string; // ISO formatdagi vaqt
+  details: any;
 }
 
 interface PaginatedResponse<T> {
@@ -75,32 +57,22 @@ export default function DashboardPage() {
     totalDealers: 0,
     totalShops: 0,
     totalSales: 0,
-    totalReturns: 0,
-    totalPurchases: 0,
   });
   const [sales, setSales] = useState<Sale[]>([]);
   const [filteredSales, setFilteredSales] = useState<Sale[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
-  const [filteredReturns, setFilteredReturns] = useState<Return[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
-  const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false);
-  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
-  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [currentPageSales, setCurrentPageSales] = useState(1);
-  const [currentPageReturns, setCurrentPageReturns] = useState(1);
-  const [currentPagePurchases, setCurrentPagePurchases] = useState(1);
+  const [currentPageActivities, setCurrentPageActivities] = useState(1);
   const [salesFilter, setSalesFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
-  const [returnsFilter, setReturnsFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
-  const [purchasesFilter, setPurchasesFilter] = useState<'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year'>('today');
   const itemsPerPage = 5;
 
   const fetchPaginatedData = async (url: string): Promise<any[]> => {
@@ -156,36 +128,20 @@ export default function DashboardPage() {
       } else if (user.role === 'shop') {
         filteredSalesData = filteredSalesData.filter((sale: Sale) => sale.sotib_oluvchi === user.id);
       }
-      filteredSalesData.sort((a: Sale, b: Sale) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
+      filteredSalesData.sort((a: Sale, b: Sale) => new Date(b.time).getTime() - new Date(a.time).getTime()); // `time` bo‘yicha saralash
       setSales(filteredSalesData);
-
-      const returnsData = await fetchPaginatedData(`${BASE_URL}sotuv_qaytarish/`);
-      let filteredReturnsData = [...returnsData];
-      if (user.role === 'dealer' || user.role === 'shop') {
-        filteredReturnsData = filteredReturnsData.filter((r: Return) => r.qaytaruvchi === user.id);
-      }
-      filteredReturnsData.sort((a: Return, b: Return) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
-      setReturns(filteredReturnsData);
 
       const warehousesData = await fetchPaginatedData(`${BASE_URL}omborlar/`);
       setWarehouses(warehousesData);
 
-      const purchasesData = await fetchPaginatedData(`${BASE_URL}purchases/`);
-      let filteredPurchasesData = [...purchasesData];
-      if (user.role === 'dealer' || user.role === 'shop') {
-        filteredPurchasesData = filteredPurchasesData.filter((p: Purchase) => p.yetkazib_beruvchi === user.id);
-      }
-      filteredPurchasesData.sort((a: Purchase, b: Purchase) => new Date(b.sana).getTime() - new Date(a.sana).getTime());
-      setPurchases(filteredPurchasesData);
-      setFilteredPurchases(filteredPurchasesData); // Dastlabki holatda barcha xaridlar ko‘rsatiladi
+      const activitiesData = await fetchPaginatedData(`${BASE_URL}activities/`);
+      setActivities(activitiesData.sort((a: Activity, b: Activity) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
 
       setStats({
         totalProducts,
         totalDealers,
         totalShops,
         totalSales: 0,
-        totalReturns: 0,
-        totalPurchases: filteredPurchasesData.reduce((sum, purchase) => sum + parseFloat(purchase.total_sum || '0'), 0),
       });
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
@@ -231,93 +187,18 @@ export default function DashboardPage() {
     if (token) fetchFilteredSales();
   }, [salesFilter, token, user, users]);
 
-  useEffect(() => {
-    const fetchFilteredReturns = async () => {
-      try {
-        const filteredReturnsData = await fetchPaginatedData(`${BASE_URL}sotuv_qaytarish/?date_filter=${returnsFilter}`);
-        let result = [...filteredReturnsData];
-        if (user.role === 'dealer' || user.role === 'shop') {
-          result = result.filter((r: Return) => r.qaytaruvchi === user.id);
-        }
-        setFilteredReturns(result);
-
-        const totalReturns = result.reduce((sum: number, returnItem: Return) => {
-          return sum + parseFloat(returnItem.total_sum || '0');
-        }, 0);
-
-        setStats((prevStats) => ({
-          ...prevStats,
-          totalReturns,
-        }));
-      } catch (error) {
-        console.error('Error fetching filtered returns:', error);
-        setError('Filtrlangan qaytarishlarni yuklashda xatolik yuz berdi');
-      }
-    };
-
-    if (token) fetchFilteredReturns();
-  }, [returnsFilter, token, user]);
-
-  // Frontendda sana bo‘yicha filtr
-  useEffect(() => {
-    const filterPurchasesByDate = () => {
-      const now = new Date();
-      let filtered = [...purchases];
-
-      switch (purchasesFilter) {
-        case 'today': {
-          const today = new Date(now.setHours(0, 0, 0, 0));
-          filtered = purchases.filter((p) => new Date(p.sana) >= today);
-          break;
-        }
-        case 'yesterday': {
-          const yesterday = new Date(now.setHours(0, 0, 0, 0));
-          yesterday.setDate(yesterday.getDate() - 1);
-          filtered = purchases.filter(
-            (p) => new Date(p.sana) >= yesterday && new Date(p.sana) < new Date(now.setHours(0, 0, 0, 0))
-          );
-          break;
-        }
-        case 'last_7_days': {
-          const last7Days = new Date(now.setHours(0, 0, 0, 0));
-          last7Days.setDate(last7Days.getDate() - 7);
-          filtered = purchases.filter((p) => new Date(p.sana) >= last7Days);
-          break;
-        }
-        case 'this_month': {
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          filtered = purchases.filter((p) => new Date(p.sana) >= startOfMonth);
-          break;
-        }
-        case 'this_year': {
-          const startOfYear = new Date(now.getFullYear(), 0, 1);
-          filtered = purchases.filter((p) => new Date(p.sana) >= startOfYear);
-          break;
-        }
-        default:
-          filtered = purchases;
-      }
-
-      setFilteredPurchases(filtered);
-      const totalPurchases = filtered.reduce((sum, purchase) => sum + parseFloat(purchase.total_sum || '0'), 0);
-      setStats((prevStats) => ({
-        ...prevStats,
-        totalPurchases,
-      }));
-    };
-
-    filterPurchasesByDate();
-  }, [purchasesFilter, purchases]);
-
-  const formatToTashkentTime = (dateString: string | null) => {
-    const date = dateString ? new Date(dateString) : new Date();
-    const offsetMinutes = 5 * 60; // UTC+5
+  const formatToTashkentTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
     const localOffsetMinutes = date.getTimezoneOffset();
     const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
-    return tashkentTime.toLocaleDateString('uz-UZ', {
+    return tashkentTime.toLocaleString('uz-UZ', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
   };
 
@@ -331,12 +212,6 @@ export default function DashboardPage() {
     return foundProduct ? foundProduct.name : `Mahsulot #${productId}`;
   };
 
-  const getSupplierName = (supplierId: number | undefined) => {
-    if (supplierId === undefined || supplierId === null) return 'Noma’lum yetkazib beruvchi';
-    const foundSupplier = users.find((u) => u.id === supplierId);
-    return foundSupplier ? foundSupplier.username : `Noma’lum yetkazib beruvchi #${supplierId}`;
-  };
-
   const getWarehouseName = (omborId: number) => {
     const foundWarehouse = warehouses.find((w) => w.id === omborId);
     return foundWarehouse ? foundWarehouse.name : `Noma’lum ombor #${omborId}`;
@@ -347,18 +222,9 @@ export default function DashboardPage() {
     setIsSaleModalOpen(true);
   };
 
-  const handlePurchaseClick = (purchase: Purchase) => {
-    setSelectedPurchase(purchase);
-    setIsPurchaseModalOpen(true);
-  };
-
-  const handleReturnClick = (returnItem: Return) => {
-    setSelectedReturn(returnItem);
-    setIsReturnModalOpen(true);
-  };
-
-  const handleViewPurchases = () => {
-    navigate('/warehouse');
+  const handleActivityClick = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setIsActivityModalOpen(true);
   };
 
   const totalPagesSales = Math.ceil(sales.length / itemsPerPage);
@@ -372,38 +238,19 @@ export default function DashboardPage() {
     if (currentPageSales < totalPagesSales) setCurrentPageSales(currentPageSales + 1);
   };
 
-  const totalPagesReturns = Math.ceil(returns.length / itemsPerPage);
-  const paginatedReturns = returns.slice((currentPageReturns - 1) * itemsPerPage, currentPageReturns * itemsPerPage);
+  const totalPagesActivities = Math.ceil(activities.length / itemsPerPage);
+  const paginatedActivities = activities.slice((currentPageActivities - 1) * itemsPerPage, currentPageActivities * itemsPerPage);
 
-  const handlePreviousPageReturns = () => {
-    if (currentPageReturns > 1) setCurrentPageReturns(currentPageReturns - 1);
+  const handlePreviousPageActivities = () => {
+    if (currentPageActivities > 1) setCurrentPageActivities(currentPageActivities - 1);
   };
 
-  const handleNextPageReturns = () => {
-    if (currentPageReturns < totalPagesReturns) setCurrentPageReturns(currentPageReturns + 1);
-  };
-
-  const totalPagesPurchases = Math.ceil(filteredPurchases.length / itemsPerPage);
-  const paginatedPurchases = filteredPurchases.slice((currentPagePurchases - 1) * itemsPerPage, currentPagePurchases * itemsPerPage);
-
-  const handlePreviousPagePurchases = () => {
-    if (currentPagePurchases > 1) setCurrentPagePurchases(currentPagePurchases - 1);
-  };
-
-  const handleNextPagePurchases = () => {
-    if (currentPagePurchases < totalPagesPurchases) setCurrentPagePurchases(currentPagePurchases + 1);
+  const handleNextPageActivities = () => {
+    if (currentPageActivities < totalPagesActivities) setCurrentPageActivities(currentPageActivities + 1);
   };
 
   const handleSalesFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSalesFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
-  };
-
-  const handleReturnsFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setReturnsFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
-  };
-
-  const handlePurchasesFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPurchasesFilter(e.target.value as 'today' | 'yesterday' | 'last_7_days' | 'this_month' | 'this_year');
   };
 
   if (loading) {
@@ -426,7 +273,7 @@ export default function DashboardPage() {
         <p className="text-gray-600">Bugungi biznes holati:</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 mb-8 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 mb-8 md:grid-cols-2 lg:grid-cols-4">
         {user?.role !== 'shop' && (
           <>
             <div className="p-6 bg-white rounded-lg shadow-sm">
@@ -482,34 +329,6 @@ export default function DashboardPage() {
           </div>
           <h3 className="text-2xl font-semibold text-gray-900">{stats.totalSales.toLocaleString()} UZS</h3>
         </div>
-
-        <div className="p-6 bg-white rounded-lg shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <Undo2 className="w-6 h-6 text-blue-600 mr-2" />
-              <span className="text-gray-600">Umumiy qaytarishlar</span>
-            </div>
-            <div className="relative">
-              <select
-                value={returnsFilter}
-                onChange={handleReturnsFilterChange}
-                className="appearance-none w-full p-2 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="today">Bugun</option>
-                <option value="yesterday">Kuni kecha</option>
-                <option value="last_7_days">Oxirgi 7 kun</option>
-                <option value="this_month">Ushbu oy</option>
-                <option value="this_year">Ushbu yil</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <h3 className="text-2xl font-semibold text-gray-900">{stats.totalReturns.toLocaleString()} UZS</h3>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -537,7 +356,7 @@ export default function DashboardPage() {
                         Sotuv {sale.id}
                       </p>
                       <p className="text-sm text-gray-600">{getUsername(sale.sotib_oluvchi)}</p>
-                      <p className="text-xs text-gray-500">{formatToTashkentTime(sale.sana)}</p>
+                      <p className="text-xs text-gray-500">{formatToTashkentTime(sale.time)}</p> {/* `time` ishlatildi */}
                     </div>
                   </div>
                   <div className="text-right">
@@ -584,165 +403,60 @@ export default function DashboardPage() {
 
         <div className="p-6 bg-white rounded-lg shadow-sm">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-medium text-gray-900">So‘nggi qaytarishlar</h3>
+            <h3 className="text-lg font-medium text-gray-900">So‘nggi faoliyatlar</h3>
             <FileText className="w-5 h-5 text-gray-400" />
           </div>
           <div className="space-y-4">
-            {paginatedReturns.length > 0 ? (
-              paginatedReturns.map((returnItem) => (
+            {paginatedActivities.length > 0 ? (
+              paginatedActivities.map((activity) => (
                 <div
-                  key={returnItem.id}
+                  key={activity.id}
                   className="flex items-center justify-between p-4 bg-gray-50 rounded-lg shadow-sm hover:bg-gray-100 transition-colors duration-200"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="p-2 bg-blue-100 rounded-full">
-                      <Undo2 className="w-5 h-5 text-blue-600" />
+                    <div className="p-2 bg-purple-100 rounded-full">
+                      <FileText className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
                       <p
-                        className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600"
-                        onClick={() => handleReturnClick(returnItem)}
+                        className="font-semibold text-gray-800 cursor-pointer hover:text-purple-600"
+                        onClick={() => handleActivityClick(activity)}
                       >
-                        Qaytarish {returnItem.id}
+                        {activity.action} #{activity.id}
                       </p>
-                      <p className="text-sm text-gray-600">{getUsername(returnItem.qaytaruvchi)}</p>
-                      <p className="text-xs text-gray-500">{formatToTashkentTime(returnItem.sana)}</p>
+                      <p className="text-sm text-gray-600">{getUsername(activity.user_id)}</p>
+                      <p className="text-xs text-gray-500">{formatToTashkentTime(activity.timestamp)}</p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-red-600">
-                      {parseFloat(returnItem.total_sum || '0').toLocaleString()} UZS
-                    </p>
                   </div>
                 </div>
               ))
             ) : (
               <div className="text-center py-6 text-gray-500">
-                <p>So‘nggi qaytarishlar mavjud emas</p>
+                <p>So‘nggi faoliyatlar mavjud emas</p>
               </div>
             )}
           </div>
-          {returns.length > itemsPerPage && (
+          {activities.length > itemsPerPage && (
             <div className="mt-4 flex justify-between items-center">
               <button
-                onClick={handlePreviousPageReturns}
-                disabled={currentPageReturns === 1}
+                onClick={handlePreviousPageActivities}
+                disabled={currentPageActivities === 1}
                 className={`px-4 py-2 rounded-md ${
-                  currentPageReturns === 1
+                  currentPageActivities === 1
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
                 }`}
               >
                 Oldingi
               </button>
-              <span className="text-sm text-gray-600">{currentPageReturns} / {totalPagesReturns}</span>
+              <span className="text-sm text-gray-600">{currentPageActivities} / {totalPagesActivities}</span>
               <button
-                onClick={handleNextPageReturns}
-                disabled={currentPageReturns === totalPagesReturns}
+                onClick={handleNextPageActivities}
+                disabled={currentPageActivities === totalPagesActivities}
                 className={`px-4 py-2 rounded-md ${
-                  currentPageReturns === totalPagesReturns
+                  currentPageActivities === totalPagesActivities
                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
-              >
-                Keyingi
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* So‘nggi harajatlar bo‘limi */}
-      <div className="mt-8">
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center">
-              <ShoppingCart className="w-6 h-6 text-orange-600 mr-2" />
-              <h3 className="text-xl font-semibold text-gray-900">So‘nggi harajatlar</h3>
-            </div>
-          </div>
-          <div className="flex items-center justify-between mb-6">
-            <span className="text-2xl font-semibold text-orange-600">
-              Umumiy harajatlar: {stats.totalPurchases.toLocaleString()} UZS
-            </span>
-            <div className="relative w-48">
-              <select
-                value={purchasesFilter}
-                onChange={handlePurchasesFilterChange}
-                className="appearance-none w-full p-2.5 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm"
-              >
-                <option value="today">Bugun</option>
-                <option value="yesterday">Kuni kecha</option>
-                <option value="last_7_days">Oxirgi 7 kun</option>
-                <option value="this_month">Ushbu oy</option>
-                <option value="this_year">Ushbu yil</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {paginatedPurchases.length > 0 ? (
-              paginatedPurchases.map((purchase) => (
-                <div
-                  key={purchase.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg shadow-sm hover:bg-orange-50 transition-colors duration-200 border border-gray-100"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 bg-orange-100 rounded-full">
-                      <ShoppingCart className="w-5 h-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p
-                        className="font-semibold text-gray-800 cursor-pointer hover:text-orange-600 transition-colors duration-150"
-                        onClick={() => handlePurchaseClick(purchase)}
-                      >
-                        Xarid #{purchase.id}
-                      </p>
-                      <p className="text-sm text-gray-600">{getSupplierName(purchase.yetkazib_beruvchi)}</p>
-                      <p className="text-xs text-gray-500">{formatToTashkentTime(purchase.sana)}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-orange-600">
-                      {parseFloat(purchase.total_sum || '0').toLocaleString()} UZS
-                    </p>
-                    <p className="text-xs text-gray-500">{getWarehouseName(purchase.ombor)}</p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p>So‘nggi harajatlar mavjud emas</p>
-              </div>
-            )}
-          </div>
-          {filteredPurchases.length > itemsPerPage && (
-            <div className="mt-6 flex justify-between items-center">
-              <button
-                onClick={handlePreviousPagePurchases}
-                disabled={currentPagePurchases === 1}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  currentPagePurchases === 1
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 text-white hover:bg-orange-700 transition-colors duration-200'
-                }`}
-              >
-                Oldingi
-              </button>
-              <span className="text-sm text-gray-600 font-medium">
-                {currentPagePurchases} / {totalPagesPurchases}
-              </span>
-              <button
-                onClick={handleNextPagePurchases}
-                disabled={currentPagePurchases === totalPagesPurchases}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  currentPagePurchases === totalPagesPurchases
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 text-white hover:bg-orange-700 transition-colors duration-200'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
                 }`}
               >
                 Keyingi
@@ -757,7 +471,7 @@ export default function DashboardPage() {
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
             <h2 className="text-lg font-medium mb-4">Sotuv {selectedSale.id} haqida ma'lumot</h2>
             <div className="space-y-4">
-              <p><strong>Sana:</strong> {formatToTashkentTime(selectedSale.sana)}</p>
+              <p><strong>Sana va vaqt:</strong> {formatToTashkentTime(selectedSale.time)}</p> {/* `time` ishlatildi */}
               <p><strong>Sotib oluvchi:</strong> {getUsername(selectedSale.sotib_oluvchi)}</p>
               <p><strong>Umumiy summa:</strong> {parseFloat(selectedSale.total_sum || '0').toLocaleString()} UZS</p>
               <p><strong>Ombor:</strong> {getWarehouseName(selectedSale.ombor)}</p>
@@ -797,87 +511,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {isPurchaseModalOpen && selectedPurchase && (
+      {isActivityModalOpen && selectedActivity && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
-            <h2 className="text-lg font-medium mb-4">Xarid {selectedPurchase.id} haqida ma'lumot</h2>
+            <h2 className="text-lg font-medium mb-4">Faoliyat #{selectedActivity.id} haqida ma'lumot</h2>
             <div className="space-y-4">
-              <p><strong>Yetkazib beruvchi:</strong> {getSupplierName(selectedPurchase.yetkazib_beruvchi)}</p>
-              <p><strong>Ombor:</strong> {getWarehouseName(selectedPurchase.ombor)}</p>
-              <p><strong>Umumiy summa:</strong> {parseFloat(selectedPurchase.total_sum || '0').toLocaleString()} UZS</p>
-              <p><strong>Sana:</strong> {formatToTashkentTime(selectedPurchase.sana)}</p>
-            </div>
-            <div className="mt-6">
-              <h3 className="text-md font-medium mb-2">Xariddagi mahsulotlar</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulot nomi</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soni</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Narx</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedPurchase.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getProductName(item.mahsulot)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.soni}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{parseFloat(item.narx || '0').toLocaleString()} UZS</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <p><strong>Foydalanuvchi:</strong> {getUsername(selectedActivity.user_id)}</p>
+              <p><strong>Harakat:</strong> {selectedActivity.action}</p>
+              <p><strong>Vaqt:</strong> {formatToTashkentTime(selectedActivity.timestamp)}</p>
+              <p><strong>Detallar:</strong> {JSON.stringify(selectedActivity.details)}</p>
             </div>
             <div className="mt-6 flex justify-end">
               <button
-                onClick={() => setIsPurchaseModalOpen(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors duration-200"
-              >
-                Yopish
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isReturnModalOpen && selectedReturn && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
-            <h2 className="text-lg font-medium mb-4">Qaytarish {selectedReturn.id} haqida ma'lumot</h2>
-            <div className="space-y-4">
-              <p><strong>Sana:</strong> {formatToTashkentTime(selectedReturn.sana)}</p>
-              <p><strong>Qaytaruvchi:</strong> {getUsername(selectedReturn.qaytaruvchi)}</p>
-              <p><strong>Umumiy summa:</strong> {parseFloat(selectedReturn.total_sum || '0').toLocaleString()} UZS</p>
-              <p><strong>Ombor:</strong> {getWarehouseName(selectedReturn.ombor)}</p>
-            </div>
-            <div className="mt-6">
-              <h3 className="text-md font-medium mb-2">Qaytarilgan mahsulotlar</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mahsulot nomi</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soni</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Narx</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {selectedReturn.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{getProductName(item.mahsulot)}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.soni}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{parseFloat(item.narx || '0').toLocaleString()} UZS</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setIsReturnModalOpen(false)}
+                onClick={() => setIsActivityModalOpen(false)}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors duration-200"
               >
                 Yopish
