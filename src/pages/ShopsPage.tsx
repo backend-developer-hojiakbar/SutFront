@@ -67,7 +67,6 @@ export default function ShopsPage() {
   const [isProductsModalOpen, setIsProductsModalOpen] = useState(false);
   const [newShop, setNewShop] = useState({
     username: '',
-    email: '',
     password: '',
     address: '',
     phone_number: '',
@@ -167,12 +166,12 @@ export default function ShopsPage() {
   const handleOpenModal = () => {
     setIsModalOpen(true);
     setIsEditMode(false);
-    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
+    setNewShop({ username: '', password: '', address: '', phone_number: '', balance: '' });
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setNewShop({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
+    setNewShop({ username: '', password: '', address: '', phone_number: '', balance: '' });
     setIsEditMode(false);
     setCurrentShopId(null);
   };
@@ -180,6 +179,15 @@ export default function ShopsPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setNewShop(prev => ({ ...prev, [name]: value }));
+  };
+
+  const generateRandomEmail = (username: string) => {
+    const existingEmails = shops.map(s => s.email.split('@')[0].replace(username, '').replace(/[^0-9]/g, ''));
+    let index = 1;
+    while (existingEmails.includes(index.toString())) {
+      index++;
+    }
+    return `${username}${index}@gmail.com`;
   };
 
   const handleAddShop = async () => {
@@ -190,9 +198,10 @@ export default function ShopsPage() {
 
     setIsSubmitting(true);
     try {
+      const generatedEmail = isEditMode ? undefined : generateRandomEmail(newShop.username);
       const shopData = {
         username: newShop.username,
-        email: newShop.email,
+        email: generatedEmail,
         password: newShop.password || undefined,
         address: newShop.address || null,
         phone_number: newShop.phone_number || null,
@@ -204,6 +213,7 @@ export default function ShopsPage() {
       if (isEditMode && currentShopId) {
         const updateData = { ...shopData };
         if (!newShop.password) delete updateData.password;
+        delete updateData.email; // Tahrirlashda email o'zgarmaydi
         const response = await axios.put(`${BASE_URL}users/${currentShopId}/`, updateData, apiConfig);
         setShops(shops.map(s => (s.id === currentShopId ? response.data : s)));
       } else {
@@ -227,7 +237,6 @@ export default function ShopsPage() {
   const handleEditShop = (shop: Shop) => {
     setNewShop({
       username: shop.username,
-      email: shop.email,
       password: '',
       address: shop.address || '',
       phone_number: shop.phone_number || '',
@@ -259,7 +268,7 @@ export default function ShopsPage() {
 
     setIsSubmitting(true);
     try {
-      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatida sana
+      const currentDate = new Date().toISOString().split('T')[0];
       const paymentData = {
         user: currentShopId,
         sana: currentDate,
@@ -330,7 +339,6 @@ export default function ShopsPage() {
 
   const filteredShops = shops.filter(shop =>
     (shop.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (shop.email && shop.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (shop.address && shop.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (shop.phone_number && shop.phone_number.includes(searchTerm))) &&
     (!selectedDealerId || shop.created_by === selectedDealerId)
@@ -428,10 +436,6 @@ export default function ShopsPage() {
                 {shop.phone_number || 'Telefon kiritilmagan'}
               </div>
               <div className="mt-2">
-                <h4 className="text-sm font-medium text-gray-700">Email</h4>
-                <p className="text-sm text-gray-500">{shop.email || 'Email kiritilmagan'}</p>
-              </div>
-              <div className="mt-2">
                 <h4 className="text-sm font-medium text-gray-700">Balans</h4>
                 <p className="text-sm text-gray-500">UZS: {parseFloat(shop.balance).toLocaleString()}</p>
               </div>
@@ -478,18 +482,6 @@ export default function ShopsPage() {
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Do‘kon nomini kiriting"
                   required
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={newShop.email}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Email kiriting"
                   disabled={isSubmitting}
                 />
               </div>
@@ -735,7 +727,7 @@ export default function ShopsPage() {
                           </td>
                         </tr>
                       ))}
-                 уде</tbody>
+                  </tbody>
                 </table>
               )}
             </div>

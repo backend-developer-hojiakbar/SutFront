@@ -17,7 +17,7 @@ interface Payment {
   id: number;
   dealerId: number;
   amount: string;
-  date: string; // ISO formatdagi sana
+  date: string;
   typeSotuv: 'naqd' | 'karta' | 'shot';
 }
 
@@ -27,7 +27,7 @@ interface Sale {
   sotib_oluvchi: number;
   total_sum: string;
   ombor: number;
-  time: string; // Yangi qo‘shilgan `time` maydoni
+  time: string;
   items: { mahsulot: number; soni: number; narx: string }[];
 }
 
@@ -41,7 +41,7 @@ interface ActivityLog {
   id: number;
   type: 'sale' | 'payment';
   description: string;
-  timestamp: string; // ISO formatdagi vaqt
+  timestamp: string;
 }
 
 const BASE_URL = 'https://lemoonapi.cdpos.uz:444/';
@@ -66,7 +66,6 @@ export default function DealersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newDealer, setNewDealer] = useState({
     username: '',
-    email: '',
     password: '',
     address: '',
     phone_number: '',
@@ -164,7 +163,7 @@ export default function DealersPage() {
     }
     setIsModalOpen(true);
     setEditingDealerId(null);
-    setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
+    setNewDealer({ username: '', password: '', address: '', phone_number: '', balance: '' });
     setError(null);
   };
 
@@ -177,7 +176,6 @@ export default function DealersPage() {
     if (dealerToEdit) {
       setNewDealer({
         username: dealerToEdit.username,
-        email: dealerToEdit.email,
         password: '',
         address: dealerToEdit.address || '',
         phone_number: dealerToEdit.phone_number || '',
@@ -210,6 +208,15 @@ export default function DealersPage() {
     setNewDealer(prev => ({ ...prev, [name]: value }));
   };
 
+  const generateRandomEmail = (username: string) => {
+    const existingEmails = dealers.map(d => d.email.split('@')[0].replace(username, '').replace(/[^0-9]/g, ''));
+    let index = 1;
+    while (existingEmails.includes(index.toString())) {
+      index++;
+    }
+    return `${username}${index}@gmail.com`;
+  };
+
   const handleSubmitDealer = async () => {
     if (user?.role !== 'admin' && user?.role !== 'omborchi') {
       setError('Sizda yangi diler qo‘shish huquqi yo‘q.');
@@ -223,9 +230,10 @@ export default function DealersPage() {
 
     setIsSubmitting(true);
     try {
+      const generatedEmail = editingDealerId ? undefined : generateRandomEmail(newDealer.username);
       const dealerData = {
         username: newDealer.username,
-        email: newDealer.email,
+        email: generatedEmail,
         password: newDealer.password || undefined,
         address: newDealer.address || null,
         phone_number: newDealer.phone_number || null,
@@ -236,6 +244,7 @@ export default function DealersPage() {
       if (editingDealerId) {
         const updateData = { ...dealerData };
         if (!newDealer.password) delete updateData.password;
+        delete updateData.email; // Tahrirlashda email o'zgarmaydi
         const response = await axios.put(`${BASE_URL}users/${editingDealerId}/`, updateData, apiConfig);
         setDealers(dealers.map(d => (d.id === editingDealerId ? response.data : d)));
       } else {
@@ -245,7 +254,7 @@ export default function DealersPage() {
 
       setIsModalOpen(false);
       setEditingDealerId(null);
-      setNewDealer({ username: '', email: '', password: '', address: '', phone_number: '', balance: '' });
+      setNewDealer({ username: '', password: '', address: '', phone_number: '', balance: '' });
       setError(null);
     } catch (err: any) {
       console.error('Error submitting dealer:', err.response?.data || err.message);
@@ -282,11 +291,10 @@ export default function DealersPage() {
 
     setIsSubmitting(true);
     try {
-      // Joriy sanani YYYY-MM-DD formatida olish
-      const currentDate = new Date().toISOString().split('T')[0]; // Faqat sana qismini olamiz
+      const currentDate = new Date().toISOString().split('T')[0];
       const paymentData = {
         user: currentDealerId,
-        sana: currentDate, // ISO format o‘rniga YYYY-MM-DD
+        sana: currentDate,
         summa: parseFloat(paymentAmount).toFixed(2),
         typeSotuv: paymentType,
       };
@@ -349,7 +357,6 @@ export default function DealersPage() {
 
   const filteredDealers = dealers.filter(dealer =>
     dealer.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (dealer.email && dealer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (dealer.address && dealer.address.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (dealer.phone_number && dealer.phone_number.includes(searchTerm))
   );
@@ -426,10 +433,6 @@ export default function DealersPage() {
                 {dealer.phone_number || 'Telefon kiritilmagan'}
               </div>
               <div className="mt-2">
-                <h4 className="text-sm font-medium text-gray-700">Email</h4>
-                <p className="text-sm text-gray-500">{dealer.email || 'Email kiritilmagan'}</p>
-              </div>
-              <div className="mt-2">
                 <h4 className="text-sm font-medium text-gray-700">Balans</h4>
                 <p className="text-sm text-gray-500">UZS: {parseFloat(dealer.balance).toLocaleString()}</p>
               </div>
@@ -483,18 +486,6 @@ export default function DealersPage() {
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Diler nomini kiriting"
                   required
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={newDealer.email}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Email kiriting"
                   disabled={isSubmitting}
                 />
               </div>
@@ -742,7 +733,9 @@ export default function DealersPage() {
                       Sana va vaqt
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Faoliyat turi
+                      Fa _
+
+oliyat turi
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tavsif
