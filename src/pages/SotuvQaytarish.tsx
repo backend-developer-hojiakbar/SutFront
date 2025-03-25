@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Trash2, Printer } from 'lucide-react';
+import { ShoppingCart, Trash2, Printer, Check, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -35,17 +35,18 @@ interface User {
   created_by?: number;
 }
 
-interface Return {
+interface DealerRequest {
   id: number;
-  sana: string;
-  time: string;
-  qaytaruvchi: number;
+  dealer?: number | null;
+  shop: number;
+  condition: 'healthy' | 'unhealthy';
+  status: 'pending' | 'approved' | 'rejected';
   total_sum: string;
-  ombor: number;
-  items: { mahsulot: number; soni: number; narx: string; is_defective: boolean }[];
+  time: string;
+  items: { product: number; quantity: number; price: string }[];
 }
 
-const SotuvQaytarishPage: React.FC = () => {
+const DealerRequestPage: React.FC = () => {
   const { token, user } = useAuthStore();
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
@@ -55,15 +56,18 @@ const SotuvQaytarishPage: React.FC = () => {
   const [isDefective, setIsDefective] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [userOmbor, setUserOmbor] = useState<Ombor | null>(null);
+  const [userOmbors, setUserOmbors] = useState<Ombor[]>([]); // Bir nechta ombor uchun
+  const [selectedOmbor, setSelectedOmbor] = useState<number | null>(null); // Tanlangan ombor
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedReturner, setSelectedReturner] = useState<number | null>(null);
+  const [selectedShop, setSelectedShop] = useState<number | null>(null);
+  const [selectedDealer, setSelectedDealer] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [totalSum, setTotalSum] = useState(0);
-  const [returnReceipt, setReturnReceipt] = useState<Return | null>(null);
+  const [requestReceipt, setRequestReceipt] = useState<DealerRequest | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [customPrice, setCustomPrice] = useState<number>(0);
+  const [requests, setRequests] = useState<DealerRequest[]>([]);
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const apiConfig = {
@@ -71,59 +75,42 @@ const SotuvQaytarishPage: React.FC = () => {
   };
 
   const fetchData = async () => {
-    if (!token) {
-      setError('Autentifikatsiya tokeni topilmadi.');
-      setLoading(false);
-      return;
-    }
-
-    if (!user || typeof user !== 'object') {
-      setError('Foydalanuvchi ma’lumotlari topilmadi yoki noto‘g‘ri.');
-      console.error('User obyekti noto‘g‘ri:', user);
-      setLoading(false);
-      return;
-    }
-
-    console.log('Foydalanuvchi ma’lumotlari:', user.role);
-
-    if (!user.role) {
-      setError('Foydalanuvchi turi (user_type) topilmadi.');
+    if (!token || !user) {
+      setError('Autentifikatsiya tokeni yoki foydalanuvchi topilmadi.');
       setLoading(false);
       return;
     }
 
     try {
+      // Omborlarni olish
       const omborRes = await axios.get(`${BASE_URL}omborlar/`, apiConfig);
       let omborData = omborRes.data.results || omborRes.data;
       if (user.user_type === 'dealer' || user.user_type === 'shop') {
         omborData = omborData.filter((o: Ombor) => o.responsible_person === user.id);
       }
-      setUserOmbor(omborData[0] || null);
+      setUserOmbors(omborData);
+      setSelectedOmbor(omborData.length > 0 ? omborData[0].id : null); // Birinchi ombor default tanlanadi
 
-      const usersRes = await axios.get(`${BASE_URL}users/?user_type=dealer`, apiConfig);
+      // Foydalanuvchilarni olish (admin bo‘lmaganlar)
+      const usersRes = await axios.get(`${BASE_URL}users/?user_type__ne=admin`, apiConfig);
       let usersData = usersRes.data.results || usersRes.data;
-      if (user.user_type === 'admin') {
-        usersData = usersData.filter((u: User) => u.user_type === 'dealer');
-      } else if (user.user_type === 'dealer') {
-        setError('Sizda bu sahifaga kirish huquqi yo‘q.');
-        navigate('/dashboard');
-        setLoading(false);
-        return;
-      } else if (user.user_type === 'shop') {
-        usersData = [user];
-      }
       setUsers(usersData);
 
+      // Mahsulotlarni olish
       const productsRes = await axios.get(`${BASE_URL}mahsulotlar/`, apiConfig);
       const omborMahsulotRes = await axios.get(`${BASE_URL}ombor_mahsulot/`, apiConfig);
       let omborMahsulotData = omborMahsulotRes.data.results || omborMahsulotRes.data;
 
       if (user.user_type === 'dealer' || user.user_type === 'shop') {
-        omborMahsulotData = omborMahsulotData.filter((om: any) => omborData.some((o: Ombor) => o.id === om.ombor));
+        omborMahsulotData = omborMahsulotData.filter((om: any) =>
+          omborData.some((o: Ombor) => o.id === om.ombor)
+        );
       }
 
       const enrichedProducts = (productsRes.data.results || productsRes.data).map((product: Product) => {
-        const omborMahsulot = omborMahsulotData.find((om: any) => om.mahsulot === product.id && omborData.some((o: Ombor) => o.id === om.ombor));
+        const omborMahsulot = omborMahsulotData.find((om: any) =>
+          omborData.some((o: Ombor) => o.id === om.ombor && om.mahsulot === product.id)
+        );
         return {
           ...product,
           narx: typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx,
@@ -131,9 +118,18 @@ const SotuvQaytarishPage: React.FC = () => {
         };
       });
       setProducts(enrichedProducts);
+
+      // Diler so‘rovlarini olish
+      const requestsRes = await axios.get(`${BASE_URL}dealer-requests/`, apiConfig);
+      setRequests(requestsRes.data.results || requestsRes.data);
     } catch (err: any) {
       console.error('Ma\'lumotlarni yuklashda xatolik:', err.response?.data || err.message);
-      setError(err.response?.data?.detail || 'Ma\'lumotlarni yuklashda xatolik yuz berdi');
+      setError(
+        err.response?.data?.detail || 
+        (err.response?.data && typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : 'Ma\'lumotlarni yuklashda xatolik yuz berdi')
+      );
     } finally {
       setLoading(false);
     }
@@ -146,7 +142,7 @@ const SotuvQaytarishPage: React.FC = () => {
       setError('Foydalanuvchi yoki token yuklanmadi.');
       setLoading(false);
     }
-  }, [token, user, navigate]);
+  }, [token, user]);
 
   const formatToTashkentTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -192,15 +188,24 @@ const SotuvQaytarishPage: React.FC = () => {
       setError('Mahsulot topilmadi');
       return;
     }
+    if (product.stock < quantity) {
+      setError(`Stokda ${product.name} uchun ${product.stock} dona mavjud, ${quantity} dona so‘raldi`);
+      return;
+    }
 
     const priceToUse = customPrice || (typeof product.narx === 'string' ? parseFloat(product.narx) : product.narx);
 
     const existingItem = cart.find((item) => item.productId === selectedProduct);
     if (existingItem) {
+      const newQuantity = existingItem.quantity + quantity;
+      if (product.stock < newQuantity) {
+        setError(`Stokda ${product.name} uchun ${product.stock} dona mavjud, ${newQuantity} dona so‘raldi`);
+        return;
+      }
       setCart(
         cart.map((item) =>
           item.productId === selectedProduct
-            ? { ...item, quantity: item.quantity + quantity, price: priceToUse, isDefective }
+            ? { ...item, quantity: newQuantity, price: priceToUse, isDefective }
             : item
         )
       );
@@ -228,83 +233,117 @@ const SotuvQaytarishPage: React.FC = () => {
     setCart(cart.filter((item) => item.productId !== productId));
   };
 
-  const processReturn = async () => {
-    if (!userOmbor) {
+  const processRequest = async () => {
+    if (!selectedOmbor) {
       setError('Ombor tanlanmagan');
-      console.error('Xatolik: Ombor tanlanmagan');
       return;
     }
 
-    if (!selectedReturner) {
-      setError('Qaytaruvchi tanlanmagan');
-      console.error('Xatolik: Qaytaruvchi tanlanmagan');
+    if (!selectedShop) {
+      setError('Do‘kon tanlanmagan');
+      return;
+    }
+
+    const shopUser = users.find((u) => u.id === selectedShop);
+    if (!shopUser || shopUser.user_type !== 'shop') {
+      setError('Tanlangan foydalanuvchi do‘kon turi bo‘lishi kerak');
       return;
     }
 
     if (cart.length === 0) {
       setError('Savatda mahsulot yo‘q');
-      console.error('Xatolik: Savatda mahsulot yo‘q');
       return;
     }
 
     try {
-      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatida sana
-      const allDefective = cart.every((item) => item.isDefective); // Barcha mahsulotlar noso'g'lommi?
-      const condition = allDefective ? 'unhealthy' : 'healthy'; // Holatni aniqlash
+      const allDefective = cart.every((item) => item.isDefective);
+      const condition = allDefective ? 'unhealthy' : 'healthy';
 
-      const returnData = {
-        qaytaruvchi: selectedReturner,
-        ombor: userOmbor.id,
-        sana: currentDate,
-        total_sum: parseFloat(totalSum.toFixed(2)),
-        time: new Date().toISOString(),
-        condition: condition, // Backendda kutilayotgan condition maydoni
+      const requestData = {
+        dealer: user.user_type === 'dealer' ? user.id : selectedDealer || null,
+        shop: selectedShop,
+        condition,
         items: cart.map((item) => ({
-          mahsulot: item.productId,
-          soni: item.quantity,
-          narx: parseFloat(item.price.toFixed(2)),
-          // `is_defective` hozircha serializerda yo'q, agar kerak bo'lsa qo'shiladi
+          product: item.productId,
+          quantity: item.quantity,
+          price: parseFloat(item.price.toFixed(2)),
         })),
       };
 
-      console.log("Yuborilayotgan qaytarish ma'lumoti (/sotuv_qaytarish/):", returnData);
-      const returnRes = await axios.post(`${BASE_URL}sotuv_qaytarish/`, returnData, apiConfig);
-      console.log("Qaytarish javobi:", returnRes.data);
+      console.log("Yuborilayotgan so‘rov ma'lumoti (/dealer-requests/):", requestData);
+      const requestRes = await axios.post(`${BASE_URL}dealer-requests/`, requestData, apiConfig);
+      console.log("So‘rov javobi:", requestRes.data);
 
-      const returnRecord: Return = {
-        id: returnRes.data.id,
-        sana: returnRes.data.sana || currentDate,
-        time: returnRes.data.time || new Date().toISOString(),
-        qaytaruvchi: selectedReturner,
-        total_sum: totalSum.toFixed(2),
-        ombor: userOmbor.id,
-        items: returnData.items.map((item) => ({
-          mahsulot: item.mahsulot,
-          soni: item.soni,
-          narx: item.narx.toString(),
-          is_defective: cart.find((cartItem) => cartItem.productId === item.mahsulot)?.isDefective || false, // Mahalliy saqlash uchun
+      const requestRecord: DealerRequest = {
+        id: requestRes.data.id,
+        dealer: requestRes.data.dealer || null,
+        shop: requestRes.data.shop,
+        condition: requestRes.data.condition,
+        status: requestRes.data.status,
+        total_sum: requestRes.data.total_sum, // Backenddan qaytgan qiymat
+        time: requestRes.data.created_at || new Date().toISOString(),
+        items: cart.map((item) => ({
+          product: item.productId,
+          quantity: item.quantity,
+          price: item.price.toFixed(2),
         })),
       };
-      setReturnReceipt(returnRecord);
+      setRequestReceipt(requestRecord);
       setIsReceiptModalOpen(true);
 
       setCart([]);
       setTotalSum(0);
-      setSelectedReturner(null);
+      setSelectedShop(null);
+      setSelectedDealer(null);
       setError(null);
       await fetchData();
     } catch (err: any) {
-      console.error('Qaytarishni saqlashda xatolik (/sotuv_qaytarish/):', err.response?.data || err.message);
-      setError(err.response?.data?.detail || 'Qaytarishni saqlashda xatolik yuz berdi');
+      console.error('So‘rovni saqlashda xatolik (/dealer-requests/):', err.response?.data || err.message);
+      setError(
+        err.response?.data?.detail || 
+        (err.response?.data && typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : 'So‘rovni saqlashda xatolik yuz berdi')
+      );
+    }
+  };
+
+  const approveRequest = async (requestId: number) => {
+    try {
+      await axios.post(`${BASE_URL}dealer-requests/${requestId}/approve/`, {}, apiConfig);
+      setRequests(requests.map((req) => (req.id === requestId ? { ...req, status: 'approved' } : req)));
+      await fetchData();
+    } catch (err: any) {
+      setError(
+        err.response?.data?.detail || 
+        (err.response?.data && typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : 'So‘rovni tasdiqlashda xatolik yuz berdi')
+      );
+    }
+  };
+
+  const rejectRequest = async (requestId: number) => {
+    try {
+      await axios.post(`${BASE_URL}dealer-requests/${requestId}/reject/`, {}, apiConfig);
+      setRequests(requests.map((req) => (req.id === requestId ? { ...req, status: 'rejected' } : req)));
+      await fetchData();
+    } catch (err: any) {
+      setError(
+        err.response?.data?.detail || 
+        (err.response?.data && typeof err.response.data === 'object' 
+          ? JSON.stringify(err.response.data) 
+          : 'So‘rovni rad etishda xatolik yuz berdi')
+      );
     }
   };
 
   const generateReceipt = () => {
-    if (!returnReceipt || !receiptRef.current) return;
+    if (!requestReceipt || !receiptRef.current) return;
 
     const opt = {
       margin: 0.5,
-      filename: `receipt_qaytarish_${returnReceipt.id}.pdf`,
+      filename: `receipt_dealer_request_${requestReceipt.id}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
@@ -314,11 +353,11 @@ const SotuvQaytarishPage: React.FC = () => {
   };
 
   const printReceipt = () => {
-    if (!returnReceipt || !receiptRef.current) return;
+    if (!requestReceipt || !receiptRef.current) return;
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
-        <html><head><title>Chek - Qaytarish #${returnReceipt.id}</title>
+        <html><head><title>Chek - Diler So‘rov #${requestReceipt.id}</title>
         <style>
           body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; font-size: 12px; line-height: 1.5; }
           .receipt { width: 80mm; margin: 0 auto; border: 2px solid #000; padding: 15px; background-color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
@@ -343,7 +382,8 @@ const SotuvQaytarishPage: React.FC = () => {
     }
   };
 
-  const getUsername = (userId: number) => {
+  const getUsername = (userId: number | null) => {
+    if (!userId) return 'Admin';
     const user = users.find((u) => u.id === userId);
     return user ? user.username : `Foydalanuvchi #${userId}`;
   };
@@ -360,34 +400,64 @@ const SotuvQaytarishPage: React.FC = () => {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6 flex items-center">
         <ShoppingCart className="mr-2" />
-        Sotuv Qaytarish
+        Diler So‘rov
       </h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow-sm">
+          {user?.user_type === 'admin' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-1">Diler (Ixtiyoriy)</label>
+              <select
+                className="w-full p-2 border border-gray-300 rounded-md"
+                value={selectedDealer || ''}
+                onChange={(e) => setSelectedDealer(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Diler tanlamaslik</option>
+                {users.filter((u) => u.user_type === 'dealer').map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Qaytaruvchi</label>
+            <label className="block text-sm font-medium mb-1">Do‘kon</label>
             <select
               className="w-full p-2 border border-gray-300 rounded-md"
-              value={selectedReturner || ''}
-              onChange={(e) => setSelectedReturner(e.target.value ? Number(e.target.value) : null)}
+              value={selectedShop || ''}
+              onChange={(e) => setSelectedShop(e.target.value ? Number(e.target.value) : null)}
               disabled={user?.user_type === 'shop'}
             >
-              <option value="">Qaytaruvchi tanlang</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.username}</option>
+              <option value="">Do‘kon tanlang</option>
+              {users.filter((u) => u.user_type === 'shop').map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.username}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="mb-4">
             <label className="block text-sm font-medium mb-1">Tanlangan Ombor</label>
-            <input
-              type="text"
-              value={userOmbor?.name || 'Ombor topilmadi'}
-              className="w-full p-2 border border-gray-300 rounded-md bg-gray-100"
-              disabled
-            />
+            <select
+              className="w-full p-2 border border-gray-300 rounded-md"
+              value={selectedOmbor || ''}
+              onChange={(e) => setSelectedOmbor(e.target.value ? Number(e.target.value) : null)}
+              disabled={userOmbors.length <= 1} // Agar faqat bitta ombor bo‘lsa, o‘chiriladi
+            >
+              {userOmbors.length === 0 ? (
+                <option value="">Ombor topilmadi</option>
+              ) : (
+                userOmbors.map((ombor) => (
+                  <option key={ombor.id} value={ombor.id}>
+                    {ombor.name}
+                  </option>
+                ))
+              )}
+            </select>
           </div>
 
           <h2 className="text-lg font-medium mb-4">Mahsulot Tanlash</h2>
@@ -514,7 +584,8 @@ const SotuvQaytarishPage: React.FC = () => {
                           {products.find((p) => p.id === item.productId)?.name}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {item.quantity} x {item.price.toLocaleString()} UZS ({item.isDefective ? 'Noso‘g‘lom' : 'So‘g‘lom'})
+                          {item.quantity} x {item.price.toLocaleString()} UZS (
+                          {item.isDefective ? 'Noso‘g‘lom' : 'So‘g‘lom'})
                         </div>
                       </div>
                       <button
@@ -536,16 +607,57 @@ const SotuvQaytarishPage: React.FC = () => {
 
                 <button
                   className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                  onClick={processReturn}
-                  disabled={cart.length === 0 || !selectedReturner}
+                  onClick={processRequest}
+                  disabled={cart.length === 0 || !selectedShop}
                 >
-                  Qaytarishni Tasdiqlash
+                  So‘rovni Yuborish
                 </button>
               </>
             )}
           </div>
         </div>
       </div>
+
+      {user?.user_type === 'admin' && (
+        <div className="mt-6 bg-white p-6 rounded-lg shadow-sm">
+          <h2 className="text-lg font-medium mb-4">Kutilayotgan So‘rovlar</h2>
+          {requests.length === 0 ? (
+            <div className="text-gray-500">So‘rovlar mavjud emas</div>
+          ) : (
+            <div className="space-y-4">
+              {requests
+                .filter((req) => req.status === 'pending')
+                .map((req) => (
+                  <div key={req.id} className="flex justify-between items-center border-b pb-2">
+                    <div>
+                    <div className="font-medium">
+  So‘rov #{req.id} - {getUsername(req.dealer)} -&gt; {getUsername(req.shop)}
+</div>
+                      <div className="text-sm text-gray-500">
+                        Jami: {parseFloat(req.total_sum).toLocaleString()} UZS | Holat:{' '}
+                        {req.condition === 'healthy' ? 'So‘g‘lom' : 'Noso‘g‘lom'}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
+                        onClick={() => approveRequest(req.id)}
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
+                        onClick={() => rejectRequest(req.id)}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isPriceModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
@@ -586,10 +698,10 @@ const SotuvQaytarishPage: React.FC = () => {
         </div>
       )}
 
-      {isReceiptModalOpen && returnReceipt && (
+      {isReceiptModalOpen && requestReceipt && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl">
-            <h2 className="text-lg font-medium mb-4">Qaytarish Muvaffaqiyatli Yakunlandi!</h2>
+            <h2 className="text-lg font-medium mb-4">So‘rov Muvaffaqiyatli Yuborildi!</h2>
             <p className="mb-4 text-gray-600">Chekni quyida ko‘rib chiqing va boshqarishingiz mumkin:</p>
 
             <div ref={receiptRef} className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
@@ -597,8 +709,8 @@ const SotuvQaytarishPage: React.FC = () => {
                 <div className="header">
                   <h2>Farg'ona viloyati, Bag'dod tumani "LEMOON" marketi</h2>
                   <div className="details">
-                    <p>Kassa raqami: {returnReceipt.id}</p>
-                    <p>Sana va vaqt: {formatToTashkentTime(returnReceipt.time)}</p>
+                    <p>So‘rov raqami: {requestReceipt.id}</p>
+                    <p>Sana va vaqt: {formatToTashkentTime(requestReceipt.time)}</p>
                   </div>
                   <p>Kassa: {user?.username || 'Noma\'lum'}</p>
                 </div>
@@ -613,36 +725,36 @@ const SotuvQaytarishPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {returnReceipt.items.map((item, index) => (
+                      {requestReceipt.items.map((item, index) => (
                         <tr key={index}>
-                          <td>{getProductName(item.mahsulot)}</td>
-                          <td>{item.soni}</td>
-                          <td>{parseFloat(item.narx).toLocaleString()}</td>
-                          <td>{item.is_defective ? 'Noso‘g‘lom' : 'So‘g‘lom'}</td>
+                          <td>{getProductName(item.product)}</td>
+                          <td>{item.quantity}</td>
+                          <td>{parseFloat(item.price).toLocaleString()}</td>
+                          <td>{requestReceipt.condition === 'healthy' ? 'So‘g‘lom' : 'Noso‘g‘lom'}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <div className="total">
-                  Jami: {parseFloat(returnReceipt.total_sum).toLocaleString()} UZS
+                  Jami: {parseFloat(requestReceipt.total_sum).toLocaleString()} UZS
                 </div>
                 <div className="footer">
                   <div className="details">
-                    <p>Qaytaruvchi: {getUsername(returnReceipt.qaytaruvchi)}</p>
-                    <p>Ombor: {userOmbor?.name || 'Noma\'lum'}</p>
+                    <p>Diler: {getUsername(requestReceipt.dealer)}</p>
+                    <p>Do‘kon: {getUsername(requestReceipt.shop)}</p>
                   </div>
                   <div className="details">
-                    <p>RRN: {returnReceipt.id.toString().padStart(12, '0')}</p>
-                    <p>Chek raqami: {returnReceipt.id}</p>
+                    <p>RRN: {requestReceipt.id.toString().padStart(12, '0')}</p>
+                    <p>So‘rov raqami: {requestReceipt.id}</p>
                   </div>
                   <div className="scanners">
                     <div className="barcode">
-                      <Barcode value={`QAYTARISH-${returnReceipt.id}`} height={30} width={1} fontSize={10} />
+                      <Barcode value={`DEALER_REQUEST-${requestReceipt.id}`} height={30} width={1} fontSize={10} />
                     </div>
                     <div className="qr-code">
                       <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=Qaytarish_ID_${returnReceipt.id}`}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=DealerRequest_ID_${requestReceipt.id}`}
                         alt="QR Code"
                       />
                     </div>
@@ -678,4 +790,4 @@ const SotuvQaytarishPage: React.FC = () => {
   );
 };
 
-export default SotuvQaytarishPage;
+export default DealerRequestPage;
