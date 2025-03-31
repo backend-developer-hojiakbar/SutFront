@@ -33,7 +33,7 @@ interface Kategoriya {
 interface Purchase {
   id: number;
   ombor: number;
-  sana: string; // Sana faqat YYYY-MM-DD formatida saqlanadi
+  sana: string;
   yetkazib_beruvchi: number;
   total_sum: number;
   items: PurchaseItem[];
@@ -131,7 +131,15 @@ export default function WarehousePage() {
         const config = { headers: { Authorization: `JWT ${token}` } };
         const baseUrl = 'https://lemoonapi.cdpos.uz:444';
 
-        const [warehousesRes, productsRes, birliklarRes, kategoriyalarRes, usersRes, purchasesRes, warehouseProductsRes] = await Promise.all([
+        const [
+          warehousesRes,
+          productsRes,
+          birliklarRes,
+          kategoriyalarRes,
+          usersRes,
+          purchasesRes,
+          warehouseProductsRes,
+        ] = await Promise.all([
           axios.get(`${baseUrl}/omborlar/`, config),
           fetchAllProducts(`${baseUrl}/mahsulotlar/`, config),
           axios.get(`${baseUrl}/birliklar/`, config),
@@ -178,7 +186,7 @@ export default function WarehousePage() {
 
   const formatToTashkentTime = (dateString: string) => {
     const date = new Date(dateString);
-    const offsetMinutes = 5 * 60; // UTC+5 (Toshkent vaqt zonasi)
+    const offsetMinutes = 5 * 60;
     const localOffsetMinutes = date.getTimezoneOffset();
     const tashkentTime = new Date(date.getTime() + (offsetMinutes + localOffsetMinutes) * 60 * 1000);
     return tashkentTime.toLocaleString('uz-UZ', {
@@ -222,7 +230,7 @@ export default function WarehousePage() {
   const handleProductEntryChange = (index: number, field: keyof ProductEntry, value: string) => {
     const newProductEntries = [...productEntries];
     if (field === 'product') {
-      const selectedProduct = products.find(p => p.name.toLowerCase() === value.toLowerCase());
+      const selectedProduct = products.find((p) => p.name.toLowerCase() === value.toLowerCase());
       newProductEntries[index].product = value;
       newProductEntries[index].narx = selectedProduct ? selectedProduct.narx.toString() : '';
     } else {
@@ -242,7 +250,7 @@ export default function WarehousePage() {
       selectedWarehouse &&
       selectedManager &&
       date &&
-      productEntries.every(entry => entry.product && entry.quantity && entry.narx)
+      productEntries.every((entry) => entry.product && entry.quantity && entry.narx)
     );
   };
 
@@ -255,8 +263,8 @@ export default function WarehousePage() {
 
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
-      const warehouseId = warehouses.find(w => w.name === selectedWarehouse)?.id;
-      const managerId = managers.find(m => m.username === selectedManager)?.id;
+      const warehouseId = warehouses.find((w) => w.name === selectedWarehouse)?.id;
+      const managerId = managers.find((m) => m.username === selectedManager)?.id;
 
       if (!warehouseId || !managerId) {
         setError('Ombor yoki yetkazib beruvchi topilmadi');
@@ -265,10 +273,10 @@ export default function WarehousePage() {
 
       const purchaseData = {
         ombor: warehouseId,
-        sana: date, // Faqat YYYY-MM-DD formatida
+        sana: date,
         yetkazib_beruvchi: managerId,
-        items: productEntries.map(entry => {
-          const product = products.find(p => p.name === entry.product);
+        items: productEntries.map((entry) => {
+          const product = products.find((p) => p.name === entry.product);
           if (!product) throw new Error(`Mahsulot "${entry.product}" topilmadi`);
           return {
             mahsulot: product.id,
@@ -306,13 +314,15 @@ export default function WarehousePage() {
     setEditingPurchase(purchase);
     setSelectedWarehouse(getWarehouseName(purchase.ombor));
     setSelectedManager(getManagerName(purchase.yetkazib_beruvchi));
-    setDate(purchase.sana.split('T')[0]); // Faqat sana qismini olish
-    setProductEntries(purchase.items.map(item => ({
-      product: getProductName(item.mahsulot),
-      quantity: item.soni.toString(),
-      narx: item.narx.toString(),
-      expiryDate: item.yaroqlilik_muddati || '',
-    })));
+    setDate(purchase.sana.split('T')[0]);
+    setProductEntries(
+      purchase.items.map((item) => ({
+        product: getProductName(item.mahsulot),
+        quantity: item.soni.toString(),
+        narx: item.narx.toString(),
+        expiryDate: item.yaroqlilik_muddati || '',
+      }))
+    );
     setProductSearchQueries(purchase.items.map(() => ''));
     setIsEditPurchaseModalOpen(true);
   };
@@ -326,8 +336,8 @@ export default function WarehousePage() {
 
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
-      const warehouseId = warehouses.find(w => w.name === selectedWarehouse)?.id;
-      const managerId = managers.find(m => m.username === selectedManager)?.id;
+      const warehouseId = warehouses.find((w) => w.name === selectedWarehouse)?.id;
+      const managerId = managers.find((m) => m.username === selectedManager)?.id;
 
       if (!warehouseId || !managerId) {
         setError('Ombor yoki yetkazib beruvchi topilmadi');
@@ -336,10 +346,10 @@ export default function WarehousePage() {
 
       const purchaseData = {
         ombor: warehouseId,
-        sana: date, // Faqat YYYY-MM-DD formatida
+        sana: date,
         yetkazib_beruvchi: managerId,
-        items: productEntries.map(entry => {
-          const product = products.find(p => p.name === entry.product);
+        items: productEntries.map((entry) => {
+          const product = products.find((p) => p.name === entry.product);
           if (!product) throw new Error(`Mahsulot "${entry.product}" topilmadi`);
           return {
             mahsulot: product.id,
@@ -351,7 +361,7 @@ export default function WarehousePage() {
       };
 
       const response = await axios.put(`https://lemoonapi.cdpos.uz:444/purchases/${editingPurchase.id}/`, purchaseData, config);
-      setPurchases(purchases.map(p => (p.id === editingPurchase.id ? response.data : p)));
+      setPurchases(purchases.map((p) => (p.id === editingPurchase.id ? response.data : p)));
 
       const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
       let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
@@ -386,7 +396,7 @@ export default function WarehousePage() {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
         await axios.delete(`https://lemoonapi.cdpos.uz:444/purchases/${id}/`, config);
-        setPurchases(purchases.filter(p => p.id !== id));
+        setPurchases(purchases.filter((p) => p.id !== id));
 
         const warehouseProductsRes = await axios.get('https://lemoonapi.cdpos.uz:444/ombor_mahsulot/', config);
         let warehouseProductsData = Array.isArray(warehouseProductsRes.data) ? warehouseProductsRes.data : warehouseProductsRes.data.results || [];
@@ -407,7 +417,7 @@ export default function WarehousePage() {
   const handleAddWarehouse = async () => {
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
-      const responsiblePersonId = managers.find(m => m.username === newWarehouse.responsible_person)?.id || null;
+      const responsiblePersonId = managers.find((m) => m.username === newWarehouse.responsible_person)?.id || null;
       const warehouseData = {
         name: newWarehouse.name,
         address: newWarehouse.address,
@@ -437,7 +447,7 @@ export default function WarehousePage() {
 
     try {
       const config = { headers: { Authorization: `JWT ${token}` } };
-      const responsiblePersonId = managers.find(m => m.username === editingWarehouse.responsible_person)?.id || editingWarehouse.responsible_person;
+      const responsiblePersonId = managers.find((m) => m.username === editingWarehouse.responsible_person)?.id || editingWarehouse.responsible_person;
       const updatedData = {
         name: editingWarehouse.name,
         address: editingWarehouse.address,
@@ -446,7 +456,7 @@ export default function WarehousePage() {
       };
 
       const response = await axios.put(`https://lemoonapi.cdpos.uz:444/omborlar/${editingWarehouse.id}/`, updatedData, config);
-      setWarehouses(warehouses.map(w => (w.id === editingWarehouse.id ? response.data : w)));
+      setWarehouses(warehouses.map((w) => (w.id === editingWarehouse.id ? response.data : w)));
       setIsEditModalOpen(false);
       setEditingWarehouse(null);
       setNotification('Ombor muvaffaqiyatli yangilandi!');
@@ -462,7 +472,7 @@ export default function WarehousePage() {
       try {
         const config = { headers: { Authorization: `JWT ${token}` } };
         await axios.delete(`https://lemoonapi.cdpos.uz:444/omborlar/${id}/`, config);
-        setWarehouses(warehouses.filter(w => w.id !== id));
+        setWarehouses(warehouses.filter((w) => w.id !== id));
         setNotification('Ombor muvaffaqiyatli o‘chirildi!');
         setTimeout(() => setNotification(null), 3000);
       } catch (err) {
@@ -541,7 +551,7 @@ export default function WarehousePage() {
       {productSearchQueries[index] && (
         <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
           {products
-            .filter(p => p.name.toLowerCase().includes(productSearchQueries[index].toLowerCase()))
+            .filter((p) => p.name.toLowerCase().includes(productSearchQueries[index].toLowerCase()))
             .map((product) => (
               <div
                 key={product.id}
@@ -928,7 +938,7 @@ export default function WarehousePage() {
                 <label className="block text-sm font-medium text-gray-700">Boshqaruvchi</label>
                 <select
                   value={getManagerName(editingWarehouse.responsible_person)}
-                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, responsible_person: managers.find(m => m.username === e.target.value)?.id || null })}
+                  onChange={(e) => setEditingWarehouse({ ...editingWarehouse, responsible_person: managers.find((m) => m.username === e.target.value)?.id || null })}
                   className="mt-1 block w-full pl-3 pr-10 py-2 border border-gray-300 bg-white rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 >
                   <option value="">Boshqaruvchi tanlang</option>
@@ -1256,7 +1266,7 @@ export default function WarehousePage() {
                       <tr key={wp.id}>
                         <td className="px-6 py-4 whitespace-nowrap">{wp.mahsulot_name}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {products.find(p => p.id === wp.mahsulot)?.narx.toLocaleString() || 'Noma’lum'} UZS
+                          {products.find((p) => p.id === wp.mahsulot)?.narx.toLocaleString() || 'Noma’lum'} UZS
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">{wp.soni} dona</td>
                         <td className="px-6 py-4 whitespace-nowrap">N/A</td>
