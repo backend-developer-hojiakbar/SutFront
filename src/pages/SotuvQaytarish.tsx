@@ -275,7 +275,8 @@ const SotuvQaytarish: React.FC = () => {
         }
 
         const shopUser = users.find((u) => u.id === selectedShop);
-        if (!shopUser || shopUser.role !== 'shop') {
+        console.log("Shop malumotlari = ", shopUser)
+        if (!shopUser || shopUser.user_type !== 'shop') {
             setError('Tanlangan foydalanuvchi do‘kon turi bo‘lishi kerak');
             return;
         }
